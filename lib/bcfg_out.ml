@@ -128,9 +128,9 @@ end = struct
 
   let of_seq seq t =
     let rec go seq =
-      match Seq.uncons seq with
-      | None -> Done
-      | Some (str, seq) ->
+      match seq () with
+      | Seq.Nil -> Done
+      | Seq.Cons (str, seq) ->
           assert (for_all not_lf str);
           let* () = write str t in
           t.column <- t.column + String.length str;
@@ -333,16 +333,16 @@ let wrap ~indent ~margin seq t =
   let open Writer in
   let space = "\\x20" in
   let rec go line_start seq =
-    match Seq.uncons seq with
-    | None -> Writer.write double_quote t
-    | Some (str, seq)
+    match seq () with
+    | Seq.Nil -> Writer.write double_quote t
+    | Seq.Cons (str, seq)
       when (not line_start) && Writer.column t + String.length str > margin ->
         let* () = Writer.write "\\" t in
         let* () = Writer.newline t in
         let* () = Writer.write (String.make indent ' ') t in
         let* () = Writer.write (if str = " " then space else str) t in
         go false seq
-    | Some (str, seq) ->
+    | Seq.Cons (str, seq) ->
         let* () = Writer.write str t in
         go false seq
   in

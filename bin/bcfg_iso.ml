@@ -18,9 +18,9 @@ let function_from_seq seq =
         cell := (remaining, seq);
         len
     | None ->
-        begin match Seq.uncons seq with
-        | None -> 0
-        | Some (str, seq) ->
+        begin match seq () with
+        | Seq.Nil -> 0
+        | Seq.Cons (str, seq) ->
             cell := (Some (str, 0), seq);
             consume buf max
         end

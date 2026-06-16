@@ -70,7 +70,7 @@ let has_newline str =
   if str = "" then false else str.[String.length str - 1] = '\n'
 
 let max_line_number lines =
-  let fn acc (line_number, _) = Int.max acc line_number in
+  let fn acc (line_number, _) = max acc line_number in
   List.fold_left fn 0 lines
 
 type cfg = { length_of_line_numbers : int }

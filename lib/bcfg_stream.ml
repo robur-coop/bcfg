@@ -88,9 +88,9 @@ let encode ?(cfg = Bcfg_out.config ()) next sink =
 let to_string ?(cfg = Bcfg_out.config ()) seq =
   let s = ref seq in
   let next () =
-    match Seq.uncons !s with
-    | None -> None
-    | Some (x, r) ->
+    match !s () with
+    | Seq.Nil -> None
+    | Seq.Cons (x, r) ->
         s := r;
         Some x
   in
@@ -134,28 +134,31 @@ let to_t seq =
     { Bcfg_type.name; parameters = List.rev !ps; children = List.rev !cs }
   in
   let rec go seq =
-    match Seq.uncons seq with
-    | None -> (
-        match !stack with
+    match seq () with
+    | Seq.Nil ->
+        begin match !stack with
         | [] -> Ok (List.rev !result)
-        | _ -> Error (`Parser_error (nowhere, "unterminated directive")))
-    | Some (Ds name, seq) ->
+        | _ -> Error (`Parser_error (nowhere, "unterminated directive"))
+        end
+    | Seq.Cons (Ds name, seq) ->
         stack := (name, ref [], ref []) :: !stack;
         go seq
-    | Some (P p, seq) -> (
-        match !stack with
+    | Seq.Cons (P p, seq) ->
+        begin match !stack with
         | (_, ps, _) :: _ ->
             ps := p :: !ps;
             go seq
         | [] ->
-            Error (`Parser_error (nowhere, "parameter outside of a directive")))
-    | Some ((Os | Oe), seq) -> go seq
-    | Some (De, seq) -> (
-        match !stack with
+            Error (`Parser_error (nowhere, "parameter outside of a directive"))
+        end
+    | Seq.Cons ((Os | Oe), seq) -> go seq
+    | Seq.Cons (De, seq) ->
+        begin match !stack with
         | top :: rest ->
             stack := rest;
             push_child (finish top);
             go seq
-        | [] -> Error (`Parser_error (nowhere, "unbalanced end of directive")))
+        | [] -> Error (`Parser_error (nowhere, "unbalanced end of directive"))
+        end
   in
   go seq
