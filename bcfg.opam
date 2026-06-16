@@ -15,4 +15,5 @@ depends: [
   "fmt"
   "logs"
   "cmdliner"
+  "menhir"
 ]
