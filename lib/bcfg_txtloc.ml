@@ -125,9 +125,9 @@ let input_line ic =
   scan [] 0 |> Bytes.unsafe_to_string
 
 let lines_around_txtloc ?(ctx = 1) ~txtloc ic =
-  let cstart = Int.max 1 (line_start txtloc - ctx)
+  let cstart = max 1 (line_start txtloc - ctx)
   and cend = line_end txtloc + ctx
-  and lstart = Int.max 1 (line_start txtloc)
+  and lstart = max 1 (line_start txtloc)
   and lend = line_end txtloc in
   let rec go idx lines =
     match input_line ic with

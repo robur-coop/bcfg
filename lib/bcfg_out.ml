@@ -92,8 +92,16 @@ end = struct
 
   let not_lf = function '\n' -> false | _ -> true
 
+  let for_all fn str =
+    try
+      for idx = 0 to String.length str - 1 do
+        if not (fn str.[idx]) then raise Exit
+      done;
+      true
+    with Exit -> false
+
   let write str t =
-    assert (String.for_all not_lf str);
+    assert (for_all not_lf str);
     let* () = write str t in
     t.column <- t.column + String.length str;
     Done
