@@ -1,0 +1,12 @@
+Package: bcfg
+Version: %%VERSION_NUM%%
+Section: unknown
+Priority: optional
+Maintainer: Robur Team <team@robur.coop>
+Standards-Version: 4.4.1
+Homepage: https://github.com/robur-coop/bcfg
+Vcs-Browser: https://github.com/robur-coop/bcfg
+Vcs-Git: https://github.com/robur-coop/bcfg.git
+Architecture: all
+Depends:
+Description: A tool to manipule simple configuration files

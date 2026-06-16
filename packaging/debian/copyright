@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: bcfg
+Upstream-Contact: Robur Team <team@robur.coop>
+Source: https://github.com/robur-coop/bcfg
+
+Files: *
+Copyright: "Romain Calascibetta <romain.calascibetta@gmail.com>"
+License: ISC
