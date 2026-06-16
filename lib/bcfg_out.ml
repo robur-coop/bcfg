@@ -252,10 +252,12 @@ let[@inline] utf_decode_length d = (d lsr decode_bits) land 0b111
 let utf_decode_is_valid i = (min <= i && i <= lo_bound) || (hi_bound <= i && i <= max)
 let[@inline] dec_invalid n = (n lsl decode_bits) lor rep
 let[@inline] dec_ret n u = utf_decode n u
+external unsafe_get_uint8 : string -> int -> int = "%string_unsafe_get"
+external get_uint8 : string -> int -> int = "%string_safe_get"
 
 let get_utf_8_uchar b i =
-  let b0 = String.get_uint8 b i in (* raises if [i] is not a valid index. *)
-  let get = String.get_uint8 in
+  let b0 = get_uint8 b i in (* raises if [i] is not a valid index. *)
+  let get = unsafe_get_uint8 in
   let max = String.length b - 1 in
   match Char.unsafe_chr b0 with (* See The Unicode Standard, Table 3.7 *)
   | '\x00' .. '\x7f' -> dec_ret 1 b0
