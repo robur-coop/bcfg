@@ -29,6 +29,6 @@ install -m 0644 $basedir/packaging/debian/copyright $debiandir/copyright
 ARCH=$(dpkg-architecture -q DEB_TARGET_ARCH)
 sed -i -e "s/^Architecture:.*/Architecture: ${ARCH}/" $debiandir/control
 
-dpkg-deb --build $rootdir $basedir/bcfg.deb
+dpkg-deb --root-owner-group --build $rootdir $basedir/bcfg.deb
 echo 'bin: [ "bcfg.deb" ]' > $basedir/bcfg.install
 echo 'doc: [ "README.md" ]' >> $basedir/bcfg.install
