@@ -22,7 +22,7 @@ let function_from_seq seq =
   let cell = ref (None, seq) in
   let consume_remaining buf max = function
     | Some (str, off) ->
-        let len = Int.min max (String.length str - off) in
+        let len = min max (String.length str - off) in
         Bytes.blit_string str off buf 0 len;
         if len = String.length str - off then Some (None, len)
         else Some (Some (str, off + len), len)
