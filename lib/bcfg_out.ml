@@ -160,11 +160,11 @@ let make_indent cfg level =
   if cfg.tab then (String.make level '\t', width)
   else (String.make width ' ', width)
 
-let[@inline] not_in_x80_to_xbf v = Char.code v lsr 6 <> 0b10
-let[@inline] not_in_xa0_to_xbf v = Char.code v lsr 5 <> 0b101
-let[@inline] not_in_x80_to_x9f v = Char.code v lsr 5 <> 0b100
-let[@inline] not_in_x90_to_xbf v = Char.code v < 0x90 || 0xbf < Char.code v
-let[@inline] not_in_x80_to_x8f v = Char.code v lsr 4 <> 0x8
+let[@inline] not_in_x80_to_xbf v = v lsr 6 <> 0b10
+let[@inline] not_in_xa0_to_xbf v = v lsr 5 <> 0b101
+let[@inline] not_in_x80_to_x9f v = v lsr 5 <> 0b100
+let[@inline] not_in_x90_to_xbf v = v < 0x90 || 0xbf < v
+let[@inline] not_in_x80_to_x8f v = v lsr 4 <> 0x8
 
 let is_valid_utf_8 str =
   let rec go len str i =
@@ -173,51 +173,51 @@ let is_valid_utf_8 str =
       match str.[i] with
       | '\x00' .. '\x7f' -> go len str (i + 1)
       | '\xc2' .. '\xdf' ->
-          if i + 1 > len || not_in_x80_to_xbf str.[i + 1] then false
+          if i + 1 > len || not_in_x80_to_xbf (Char.code str.[i + 1]) then false
           else go len str (i + 2)
       | '\xe0' ->
           if
             i + 2 > len
-            || not_in_xa0_to_xbf str.[i + 1]
-            || not_in_x80_to_xbf str.[i + 2]
+            || not_in_xa0_to_xbf (Char.code str.[i + 1])
+            || not_in_x80_to_xbf (Char.code str.[i + 2])
           then false
           else go len str (i + 3)
       | '\xe1' .. '\xec' | '\xee' .. '\xef' ->
           if
             i + 2 > len
-            || not_in_x80_to_xbf str.[i + 1]
-            || not_in_x80_to_xbf str.[i + 2]
+            || not_in_x80_to_xbf (Char.code str.[i + 1])
+            || not_in_x80_to_xbf (Char.code str.[i + 2])
           then false
           else go len str (i + 3)
       | '\xed' ->
           if
             i + 2 > len
-            || not_in_x80_to_x9f str.[i + 1]
-            || not_in_x80_to_xbf str.[i + 2]
+            || not_in_x80_to_x9f (Char.code str.[i + 1])
+            || not_in_x80_to_xbf (Char.code str.[i + 2])
           then false
           else go len str (i + 3)
       | '\xf0' ->
           if
             i + 3 > len
-            || not_in_x90_to_xbf str.[i + 1]
-            || not_in_x80_to_xbf str.[i + 2]
-            || not_in_x80_to_xbf str.[i + 3]
+            || not_in_x90_to_xbf (Char.code str.[i + 1])
+            || not_in_x80_to_xbf (Char.code str.[i + 2])
+            || not_in_x80_to_xbf (Char.code str.[i + 3])
           then false
           else go len str (i + 4)
       | '\xf1' .. '\xf3' ->
           if
             i + 3 > len
-            || not_in_x80_to_xbf str.[i + 1]
-            || not_in_x80_to_xbf str.[i + 2]
-            || not_in_x80_to_xbf str.[i + 3]
+            || not_in_x80_to_xbf (Char.code str.[i + 1])
+            || not_in_x80_to_xbf (Char.code str.[i + 2])
+            || not_in_x80_to_xbf (Char.code str.[i + 3])
           then false
           else go len str (i + 4)
       | '\xf4' ->
           if
             i + 3 > len
-            || not_in_x80_to_x8f str.[i + 1]
-            || not_in_x80_to_xbf str.[i + 2]
-            || not_in_x80_to_xbf str.[i + 3]
+            || not_in_x80_to_x8f (Char.code str.[i + 1])
+            || not_in_x80_to_xbf (Char.code str.[i + 2])
+            || not_in_x80_to_xbf (Char.code str.[i + 3])
           then false
           else go len str (i + 4)
       | _ -> false
@@ -225,6 +225,87 @@ let is_valid_utf_8 str =
   go (String.length str - 1) str 0
 
 [@@@ocamlformat "disable"]
+
+let[@inline] utf_8_uchar_2 b0 b1 =
+  ((b0 land 0x1F) lsl 6) lor
+  ((b1 land 0x3F))
+
+let[@inline] utf_8_uchar_3 b0 b1 b2 =
+  ((b0 land 0x0F) lsl 12) lor
+  ((b1 land 0x3F) lsl 6) lor
+  ((b2 land 0x3F))
+
+let[@inline] utf_8_uchar_4 b0 b1 b2 b3 =
+  ((b0 land 0x07) lsl 18) lor
+  ((b1 land 0x3F) lsl 12) lor
+  ((b2 land 0x3F) lsl 6) lor
+  ((b3 land 0x3F))
+
+let decode_bits = 24
+let min = 0x0000
+let max = 0x10ffff
+let lo_bound = 0xd7ff
+let hi_bound = 0xe000
+let rep = 0xfffd
+let[@inline] utf_decode n u = ((8 lor n) lsl decode_bits) lor u
+let[@inline] utf_decode_length d = (d lsr decode_bits) land 0b111
+let utf_decode_is_valid i = (min <= i && i <= lo_bound) || (hi_bound <= i && i <= max)
+let[@inline] dec_invalid n = (n lsl decode_bits) lor rep
+let[@inline] dec_ret n u = utf_decode n u
+
+let get_utf_8_uchar b i =
+  let b0 = String.get_uint8 b i in (* raises if [i] is not a valid index. *)
+  let get = String.get_uint8 in
+  let max = String.length b - 1 in
+  match Char.unsafe_chr b0 with (* See The Unicode Standard, Table 3.7 *)
+  | '\x00' .. '\x7f' -> dec_ret 1 b0
+  | '\xc2' .. '\xdf' ->
+      let i = i + 1 in if i > max then dec_invalid 1 else
+      let b1 = get b i in if not_in_x80_to_xbf b1 then dec_invalid 1 else
+      dec_ret 2 (utf_8_uchar_2 b0 b1)
+  | '\xe0' ->
+      let i = i + 1 in if i > max then dec_invalid 1 else
+      let b1 = get b i in if not_in_xa0_to_xbf b1 then dec_invalid 1 else
+      let i = i + 1 in if i > max then dec_invalid 2 else
+      let b2 = get b i in if not_in_x80_to_xbf b2 then dec_invalid 2 else
+      dec_ret 3 (utf_8_uchar_3 b0 b1 b2)
+  | '\xe1' .. '\xeC' | '\xee' .. '\xef' ->
+      let i = i + 1 in if i > max then dec_invalid 1 else
+      let b1 = get b i in if not_in_x80_to_xbf b1 then dec_invalid 1 else
+      let i = i + 1 in if i > max then dec_invalid 2 else
+      let b2 = get b i in if not_in_x80_to_xbf b2 then dec_invalid 2 else
+      dec_ret 3 (utf_8_uchar_3 b0 b1 b2)
+  | '\xed' ->
+      let i = i + 1 in if i > max then dec_invalid 1 else
+      let b1 = get b i in if not_in_x80_to_x9f b1 then dec_invalid 1 else
+      let i = i + 1 in if i > max then dec_invalid 2 else
+      let b2 = get b i in if not_in_x80_to_xbf b2 then dec_invalid 2 else
+      dec_ret 3 (utf_8_uchar_3 b0 b1 b2)
+  | '\xf0' ->
+      let i = i + 1 in if i > max then dec_invalid 1 else
+      let b1 = get b i in if not_in_x90_to_xbf b1 then dec_invalid 1 else
+      let i = i + 1 in if i > max then dec_invalid 2 else
+      let b2 = get b i in if not_in_x80_to_xbf b2 then dec_invalid 2 else
+      let i = i + 1 in if i > max then dec_invalid 3 else
+      let b3 = get b i in if not_in_x80_to_xbf b3 then dec_invalid 3 else
+      dec_ret 4 (utf_8_uchar_4 b0 b1 b2 b3)
+  | '\xf1' .. '\xf3' ->
+      let i = i + 1 in if i > max then dec_invalid 1 else
+      let b1 = get b i in if not_in_x80_to_xbf b1 then dec_invalid 1 else
+      let i = i + 1 in if i > max then dec_invalid 2 else
+      let b2 = get b i in if not_in_x80_to_xbf b2 then dec_invalid 2 else
+      let i = i + 1 in if i > max then dec_invalid 3 else
+      let b3 = get b i in if not_in_x80_to_xbf b3 then dec_invalid 3 else
+      dec_ret 4 (utf_8_uchar_4 b0 b1 b2 b3)
+  | '\xf4' ->
+      let i = i + 1 in if i > max then dec_invalid 1 else
+      let b1 = get b i in if not_in_x80_to_x8f b1 then dec_invalid 1 else
+      let i = i + 1 in if i > max then dec_invalid 2 else
+      let b2 = get b i in if not_in_x80_to_xbf b2 then dec_invalid 2 else
+      let i = i + 1 in if i > max then dec_invalid 3 else
+      let b3 = get b i in if not_in_x80_to_xbf b3 then dec_invalid 3 else
+      dec_ret 4 (utf_8_uchar_4 b0 b1 b2 b3)
+  | _ -> dec_invalid 1
 
 let safe_for_word = function
   | (* ! *) '\x21'
@@ -267,9 +348,9 @@ let is_valid_word str = is_valid_utf_8 str && Writer.for_all safe_for_word str
 let iter_on_utf_8 fn str =
   let rec go idx =
     if idx < String.length str then
-      let dec = String.get_utf_8_uchar str idx in
-      if Uchar.utf_decode_is_valid dec then begin
-        match Uchar.utf_decode_length dec with
+      let dec = get_utf_8_uchar str idx in
+      if utf_decode_is_valid dec then begin
+        match utf_decode_length dec with
         | 1 ->
             fn (`Char str.[idx]);
             go (idx + 1)
