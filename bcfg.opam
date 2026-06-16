@@ -10,7 +10,7 @@ license:      "MIT"
 synopsis:     "A boring configuration format"
 build:        [ "ocaml" "pkg/pkg.ml" "buid" "--dev-pkg" "%{dev}%" ]
 depends: [
-  "ocaml"       {>= "4.07.0"}
+  "ocaml"       {>= "4.08.0"}
   "dune"
   "fmt"
   "logs"
