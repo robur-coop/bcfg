@@ -8,7 +8,12 @@ dev-repo:     "git+https://github.com/robur-coop/bcfg.git"
 doc:          "https://robur-coop.github.io/bcfg/"
 license:      "MIT"
 synopsis:     "A boring configuration format"
-build:        [ "ocaml" "pkg/pkg.ml" "buid" "--dev-pkg" "%{dev}%" ]
+build: [
+  [ "dune" "subst" ] {dev}
+  [ "dune" "build" "-p" name "-j" jobs ]
+  [ "dune" "runtest" "-p" name "-j" jobs ]
+  [ "sh" "-ex" "packaging/debian/create-package.sh" ] {os-family = "debian" | os-family = "ubuntu" }
+]
 depends: [
   "ocaml"       {>= "4.08.0"}
   "dune"
@@ -20,3 +25,4 @@ depends: [
   "crowbar" {with-test}
   "hxd" {with-test}
 ]
+x-maintenance-intent: [ "(latest)" ]
