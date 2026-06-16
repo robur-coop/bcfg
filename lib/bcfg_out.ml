@@ -13,6 +13,7 @@ module Writer : sig
   val writev : string list -> ctx -> t
   val of_seq : string Seq.t -> ctx -> t
   val to_seq : t -> string Seq.t
+  val for_all : (char -> bool) -> string -> bool
 end = struct
   type t =
     | Write of { str : string; off : int; len : int; k : int -> t }
@@ -118,7 +119,7 @@ end = struct
     let rec go = function
       | [] -> Done
       | x :: r ->
-          assert (String.for_all not_lf x);
+          assert (for_all not_lf x);
           let* () = write x t in
           t.column <- t.column + String.length x;
           go r
@@ -130,7 +131,7 @@ end = struct
       match Seq.uncons seq with
       | None -> Done
       | Some (str, seq) ->
-          assert (String.for_all not_lf str);
+          assert (for_all not_lf str);
           let* () = write str t in
           t.column <- t.column + String.length str;
           go seq
@@ -251,7 +252,7 @@ let escape_with_slash = function
   | _ -> assert false
 
 let word str =
-  assert (String.for_all safe_for_word str);
+  assert (Writer.for_all safe_for_word str);
   let buf = Buffer.create (String.length str) in
   let fn = function
     | '\x07' | '\x08' | '\x09' | '\x0a' | '\x0b' | '\x0c' | '\x0d' | '\x22' | '\x5c' as chr ->

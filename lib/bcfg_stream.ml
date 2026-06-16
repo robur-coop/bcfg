@@ -70,12 +70,12 @@ type decoder = { mutable seq : (lexeme, error) result Seq.t }
 let decoder lexbuf = { seq = to_seq lexbuf }
 
 let decode d =
-  match Seq.uncons d.seq with
-  | None -> Ok None
-  | Some (Ok lx, seq) ->
+  match d.seq () with
+  | Seq.Nil -> Ok None
+  | Seq.Cons (Ok lx, seq) ->
       d.seq <- seq;
       Ok (Some lx)
-  | Some (Error e, _) ->
+  | Seq.Cons (Error e, _) ->
       d.seq <- Seq.empty;
       Error e
 

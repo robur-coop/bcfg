@@ -6,7 +6,7 @@ let rchop ~len str =
   String.sub str 0 (String.length str - len)
 
 let rchop_if_lf str =
-  if str = String.empty then String.empty
+  if str = "" then ""
   else
     match str.[String.length str - 1] with '\n' -> rchop ~len:1 str | _ -> str
 
@@ -67,7 +67,7 @@ let source_of_filepath filepath =
   (ic, src, finally)
 
 let has_newline str =
-  if str = String.empty then false else str.[String.length str - 1] = '\n'
+  if str = "" then false else str.[String.length str - 1] = '\n'
 
 let max_line_number lines =
   let fn acc (line_number, _) = Int.max acc line_number in
