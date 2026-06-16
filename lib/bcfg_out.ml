@@ -262,7 +262,7 @@ let word str =
   String.iter fn str;
   Buffer.contents buf
 
-let is_valid_word str = is_valid_utf_8 str && String.for_all safe_for_word str
+let is_valid_word str = is_valid_utf_8 str && Writer.for_all safe_for_word str
 
 let iter_on_utf_8 fn str =
   let rec go idx =

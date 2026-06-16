@@ -3,3 +3,73 @@
 [bcfg] is a format for configuration files, tools for manipulating these files,
 and an OCaml library for processing them. The purpose of this document is to
 introduce new users to this project by showing practical examples of its use.
+
+{2 A simple format.}
+
+[bcfg] is essentially based on the format described here:
+{{:https://codeberg.org/emersion/scfg}scfg}. It is a fairly simple format that
+allows values to be linked to one another and creates a kind of hierarchy by
+associating "children" with values. This format is structured by line breaks:
+the aim is to ensure readability (as opposed to a minimalist approach). Finally,
+this format does not define any primary value types such as numbers; everything
+is a "string" and must be encoded in UTF-8. Here is a simple example:
+
+{@bcfg[
+dinosaure {
+  website https://din.osau.re
+}
+
+hannes {
+  website https://hannes.robur.coop
+}
+
+reynir {
+  website https://reyn.ir/
+}
+
+robur {
+  members {
+    hannes
+    reynir
+    dinosaure
+    pixie
+  }
+}
+
+me {
+  username dinosaure
+}
+]}
+
+As you can see, the format is fairly simple. [bcfg] offers several tools for
+working with this type of configuration file. The first tool is validation:
+{@shell[
+$ bcfg validate file.cfg
+$ echo $?
+0
+]}
+
+It allows you to validate a file and can display clear error messages if there
+is a syntax error:
+
+{@shell[
+$ bcfg validate - <<EOF
+> foo {
+> EOF
+Error at l2.0-0:                     
+> Missing a subdirective.
+ 1 foo {
+>  EOF
+]}
+
+Finally, [bcfg] must ensure what is known as a form of {i isomorphism}: in other
+words, whatever it is capable of parsing, it must be able to output again
+without alteration. There is a tool to verify this: [bcfg iso]. It parses a
+given file, re-encodes the value and re-parses the result, then compares the
+new value, which must be equivalent to the first.
+
+{@shell[
+$ bcfg iso file.cfg
+$ echo $?
+0
+]}

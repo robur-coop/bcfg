@@ -1,6 +1,7 @@
 (cram
  (deps
   (source_tree materials/valid)
+  (source_tree materials/invalid)
   %{bin:bcfg}))
 
 (library
