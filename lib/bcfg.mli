@@ -26,6 +26,12 @@ module Txtloc : sig
       contextualizes the error based on the file content available via [ic].
       Note that the [ic] used {b must not} be the same as the one used (and
       already consumed) to analyze the [bcfg] file. *)
+
+  val lines_around_txtloc_string :
+    ?ctx:int -> txtloc:t -> string -> (int * line) list
+  (** Same as {!lines_around_txtloc} but reads the lines from an in-memory
+      [string] (the whole file content) instead of an [in_channel]. Useful when
+      the input is not seekable (e.g. standard input). *)
 end
 
 (** {1 Configuration file parser.}

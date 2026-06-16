@@ -124,13 +124,31 @@ let input_line ic =
   in
   scan [] 0 |> Bytes.unsafe_to_string
 
-let lines_around_txtloc ?(ctx = 1) ~txtloc ic =
+(* Like {!input_line} but consuming a [string]: yields each line keeping its
+   trailing ['\n'] when present, and raises [End_of_file] once exhausted. *)
+let string_line_reader content =
+  let len = String.length content in
+  let pos = ref 0 in
+  fun () ->
+    if !pos >= len then raise End_of_file
+    else
+      match String.index_from_opt content !pos '\n' with
+      | Some i ->
+          let line = String.sub content !pos (i - !pos + 1) in
+          pos := i + 1;
+          line
+      | None ->
+          let line = String.sub content !pos (len - !pos) in
+          pos := len;
+          line
+
+let lines_around ?(ctx = 1) ~txtloc read_line =
   let cstart = max 1 (line_start txtloc - ctx)
   and cend = line_end txtloc + ctx
   and lstart = max 1 (line_start txtloc)
   and lend = line_end txtloc in
   let rec go idx lines =
-    match input_line ic with
+    match read_line () with
     | line ->
         (* errored lines *)
         if idx >= lstart && idx <= lend then
@@ -149,3 +167,9 @@ let lines_around_txtloc ?(ctx = 1) ~txtloc ic =
         else List.rev lines
   in
   go 1 []
+
+let lines_around_txtloc ?ctx ~txtloc ic =
+  lines_around ?ctx ~txtloc (fun () -> input_line ic)
+
+let lines_around_txtloc_string ?ctx ~txtloc content =
+  lines_around ?ctx ~txtloc (string_line_reader content)

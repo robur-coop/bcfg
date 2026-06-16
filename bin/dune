@@ -9,7 +9,7 @@
  (name bcfg_validate)
  (public_name bcfg.validate)
  (modules bcfg_validate)
- (libraries threads bcfg.cli bcfg))
+ (libraries bcfg.cli bcfg))
 
 (library
  (name bcfg_iso)

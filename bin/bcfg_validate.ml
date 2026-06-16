@@ -1,4 +1,3 @@
-let ( let@ ) finally fn = Fun.protect ~finally fn
 let error_msgf fmt = Fmt.kstr (fun msg -> Error (`Msg msg)) fmt
 
 let rchop ~len str =
@@ -28,43 +27,29 @@ let escape str =
   String.iter fn str;
   Buffer.contents buf
 
-let tee fd =
-  let p0i, p0o = Unix.pipe () in
-  let p1i, p1o = Unix.pipe () in
-  let tmp = Bytes.create 0x10000 in
+let read_all ic =
+  let buf = Buffer.create 0x10000 in
+  let chunk = Bytes.create 0x10000 in
   let rec go () =
-    match Unix.read fd tmp 0 (Bytes.length tmp) with
-    | 0 ->
-        Unix.close p0o;
-        Unix.close p1o
-    | len ->
-        let str = Bytes.unsafe_to_string tmp in
-        let _ = Unix.write_substring p0o str 0 len in
-        let _ = Unix.write_substring p1o str 0 len in
-        go ()
+    let n = input ic chunk 0 (Bytes.length chunk) in
+    if n > 0 then begin
+      Buffer.add_substring buf (Bytes.unsafe_to_string chunk) 0 n;
+      go ()
+    end
   in
-  let thread = Thread.create go () in
-  (thread, p0i, p1i)
+  go ();
+  Buffer.contents buf
 
-let source_from_stdin () =
-  let thread, fd0, fd1 = tee Unix.stdin in
-  let ic0 = Unix.in_channel_of_descr fd0 in
-  let ic1 = Unix.in_channel_of_descr fd1 in
-  let finally () = Thread.join thread in
-  (ic0, ic1, finally)
-
-let source_of_filepath filepath =
-  (* Two independent channels on the same file: [ic] is consumed by the parser,
-     [src] is used to re-read the lines around an error. They must be distinct
-     channels (with independent offsets), so we open the file twice rather than
-     [Unix.dup] (which would share the offset). *)
-  let ic = open_in_bin filepath in
-  let src = open_in_bin filepath in
-  let finally () =
-    close_in_noerr ic;
-    close_in_noerr src
-  in
-  (ic, src, finally)
+(* Read the whole input into memory once. We need the full content both to feed
+   the parser and to re-read the lines around a potential error; buffering it in
+   a string avoids the previous two-pipe [tee], which deadlocked on inputs
+   larger than a pipe buffer (the error-context pipe was only drained on error).
+   The input is read exactly once, so this also works on non-seekable stdin. *)
+let read_input = function
+  | None -> read_all stdin
+  | Some filepath ->
+      let ic = open_in_bin filepath in
+      Fun.protect ~finally:(fun () -> close_in_noerr ic) (fun () -> read_all ic)
 
 let has_newline str =
   if str = "" then false else str.[String.length str - 1] = '\n'
@@ -187,51 +172,47 @@ let pp_error_message ppf (state, Bcfg.Error.Error (symbol, v)) =
   | state, symbol ->
       Fmt.pf ppf "%d => @[<hov>%a@]@\n" state (pp_symbol symbol) v
 
-let pp_error_with_source ?filepath ?src ppf err =
-  match (filepath, src, err) with
-  | _, Some src, `Lexer_error (txtloc, `Message msg) ->
-      let lines = Bcfg.Txtloc.lines_around_txtloc ~txtloc src in
+let pp_error_with_source ~content ppf err =
+  let lines txtloc = Bcfg.Txtloc.lines_around_txtloc_string ~txtloc content in
+  match err with
+  | `Lexer_error (txtloc, `Message msg) ->
+      let lines = lines txtloc in
       let cfg = cfg lines in
       Fmt.pf ppf "Error at %a:@\n" Bcfg.Txtloc.pp txtloc;
       (* NOTE(dinosaure): [msg] (from [Lexer]) does **not** contains ['\n']. *)
       Fmt.pf ppf "> %s@\n" msg;
       let fn = Fmt.pf ppf "%a" (pp_line_with_ansi ~cfg) in
       List.iter fn lines
-  | _, Some src, `Lexer_error (txtloc, `Invalid_character chr) ->
-      let lines = Bcfg.Txtloc.lines_around_txtloc ~txtloc src in
+  | `Lexer_error (txtloc, `Invalid_character chr) ->
+      let lines = lines txtloc in
       let cfg = cfg lines in
       Fmt.pf ppf "Invalid character %S at %a:@\n" (String.make 1 chr)
         Bcfg.Txtloc.pp txtloc;
       let fn = Fmt.pf ppf "%a" (pp_line_with_ansi ~cfg) in
       List.iter fn lines
-  | _, Some src, `Parser_error (txtloc, None) ->
-      let lines = Bcfg.Txtloc.lines_around_txtloc ~txtloc src in
+  | `Parser_error (txtloc, None) ->
+      let lines = lines txtloc in
       let cfg = cfg lines in
       Fmt.pf ppf "Invalid syntax at %a:@\n" Bcfg.Txtloc.pp txtloc;
       let fn = Fmt.pf ppf "%a" (pp_line_with_ansi ~cfg) in
       List.iter fn lines
-  | _, Some src, `Parser_error (txtloc, Some err) ->
-      let lines = Bcfg.Txtloc.lines_around_txtloc ~txtloc src in
+  | `Parser_error (txtloc, Some err) ->
+      let lines = lines txtloc in
       let cfg = cfg lines in
       Fmt.pf ppf "Error at %a:@\n" Bcfg.Txtloc.pp txtloc;
       (* NOTE(dinosaure): [msg] already contains ['\n']. *)
       Fmt.pf ppf "%a" pp_error_message err;
       let fn = Fmt.pf ppf "%a" (pp_line_with_ansi ~cfg) in
       List.iter fn lines
-  | _ -> assert false
+  | `Rejected -> Fmt.pf ppf "Rejected@\n"
 
 let run quiet input =
-  let ic, src, finally =
-    match input with
-    | None -> source_from_stdin ()
-    | Some filepath -> source_of_filepath filepath
-  in
-  let@ () = finally in
-  let lexbuf = Lexing.from_channel ~with_positions:true ic in
+  let content = read_input input in
+  let lexbuf = Lexing.from_string ~with_positions:true content in
   match Bcfg.parser lexbuf with
   | Ok _ -> Ok 0
   | Error err when not quiet ->
-      Fmt.epr "%a%!" (pp_error_with_source ?filepath:input ~src) err;
+      Fmt.epr "%a%!" (pp_error_with_source ~content) err;
       Ok 1
   | Error _ -> Ok 1
 
