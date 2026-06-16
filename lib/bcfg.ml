@@ -115,9 +115,9 @@ module Error = struct
     | M.N M.N_list_WORD_ -> Error (Non_terminal Parameters, v)
 
   let from_env env =
-    match M.stack env with
-    | (lazy Nil) -> None
-    | (lazy (Cons (M.Element (state, v, _, _), _))) ->
+    match M.top env with
+    | None -> None
+    | Some (M.Element (state, v, _, _)) ->
         let symbol = from_symbol (M.incoming_symbol state) v in
         let state = M.number state in
         Some (state, symbol)
