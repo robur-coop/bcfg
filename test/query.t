@@ -32,6 +32,6 @@ A few queries on a small configuration.
   website https://github.com/dinosaure
   website https://din.osau.re/
   website https://hannes.robur.coop/
-  $ bcfg query "(\$(dinosaure.username)).website" sample.cfg
+  $ bcfg query "(@(dinosaure.username)).website" sample.cfg
   website https://github.com/dinosaure
   website https://din.osau.re/

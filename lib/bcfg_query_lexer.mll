@@ -34,6 +34,13 @@ rule token = parse
   | '&' { AND }
   | ',' { COMMA }
   | '.' { DOT }
+  | '*' { STAR }
+  | ':' { COLON }
+  | '^' { CARET }
+  (* Substitution prefix: ['@'] is the recommended form (safe inside shell
+     double quotes, unlike ['$'] which triggers command substitution); ['$'] is
+     kept as an alias for jq familiarity. *)
+  | '@' { DOLLAR }
   | '$' { DOLLAR }
   | wsp { token lexbuf }
   | eof { EOF }

@@ -64,6 +64,28 @@ let test_peval_index_equivalence =
     (List.length (run "account($(me.username))")
     = List.length (run "account($(me.username[0]))"))
 
+let test_wildcard =
+  Test.test ~title:"wildcard" @@ fun () ->
+  Test.check ~msg:"top-level *" (List.length (run "*") = 3);
+  Test.check ~msg:"account.* names"
+    ([ "service"; "service" ] = names_of (run "account.*"));
+  Test.check ~msg:"account(*)" (List.length (run "account(*)") = 2)
+
+let test_child =
+  Test.test ~title:"child filter (:)" @@ fun () ->
+  Test.check ~msg:"*(:service)"
+    ([ "account"; "account" ] = names_of (run "*(:service)"));
+  Test.check ~msg:"*(:username)" ([ "me" ] = names_of (run "*(:username)"));
+  Test.check ~msg:"account(:service)" (List.length (run "account(:service)") = 2);
+  Test.check ~msg:"none" (run "*(:nope)" = [])
+
+let test_antijoin =
+  Test.test ~title:"anti-join (^ and :^)" @@ fun () ->
+  Test.check ~msg:"*(:^service)" ([ "me" ] = names_of (run "*(:^service)"));
+  Test.check ~msg:"account(:^service)" (run "account(:^service)" = []);
+  Test.check ~msg:"account(^dinosaure)"
+    ([ "hannes" ] = names_of (run "account(^dinosaure)[0]"))
+
 let () =
   Test.run
     [
@@ -73,4 +95,7 @@ let () =
       test_parameter_pattern;
       test_peval;
       test_peval_index_equivalence;
+      test_wildcard;
+      test_child;
+      test_antijoin;
     ]

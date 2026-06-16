@@ -91,14 +91,14 @@ The distribution provides several layers:
   scalars value according to primary OCaml types (such as `int`) and some
   combinators.
 - `bcfg` (the command-line tool): `validate`, `iso`, `query` and `lint`. The
-  `query` sub-command is a small `jq`-like selector (it even supports `$(...)`
-  substitutions, e.g. `account($(me.username))`); its result can be printed as
-  `bcfg` (the default) or as JSON with `-o json`, ready to be piped into `jq`.
-  The `lint` sub-command reformats a configuration: it re-indents it and wraps
-  long values at the right margin. The indentation and the margin are
-  configurable in the spirit of `vim`'s `shiftwidth`/`expandtab` and
-  `textwidth`: `--indent N` for `N` spaces, `--indent tab` for tab characters
-  (with `--tab-width` as the tab stop), and `--margin C`.
+  `query` sub-command is a small `jq`-like selector (it even supports `@(...)`
+  substitutions -- also written `$(...)` --, e.g. `(@(me.username))`); its
+  result can be printed as `bcfg` (the default) or as JSON with `-o json`, ready
+  to be piped into `jq`. The `lint` sub-command reformats a configuration: it
+  re-indents it and wraps long values at the right margin. The indentation and
+  the margin are configurable in the spirit of `vim`'s `shiftwidth`/`expandtab`
+  and `textwidth`: `--indent N` for `N` spaces, `--indent tab` for tab
+  characters (with `--tab-width` as the tab stop), and `--margin C`.
 
 ```sh
 $ bcfg query 'dinosaure.website' config.cfg

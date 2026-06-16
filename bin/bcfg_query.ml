@@ -78,11 +78,32 @@ let cmd =
          JSON (to be piped into tools such as $(b,jq)).";
       `S "QUERY LANGUAGE";
       `P "$(b,foo) selects the top-level directives named \"foo\".";
+      `P
+        "$(b,*) matches any name, e.g. $(b,robur.members.*) lists every child \
+         of $(b,members) and $(b,*) alone selects all the top-level \
+         directives.";
       `P "$(b,foo.bar) selects the \"bar\" sub-directives of \"foo\".";
       `P "$(b,foo[0]) keeps the first parameter of the matching directives.";
       `P
         "$(b,foo\\(a|b\\)) keeps the \"foo\" directives having a parameter \
          matching \"a\" or \"b\".";
+      `P
+        "$(b,foo\\(:bar\\)) keeps the \"foo\" directives that contain a child \
+         (sub-directive) whose name matches \"bar\", e.g. $(b,*\\(:members\\)) \
+         lists the directives that define a $(b,members) block.";
+      `P
+        "$(b,foo\\(^bar\\)) and $(b,foo\\(:^bar\\)) are the anti-joins: keep \
+         the directives that have $(i,no) parameter (resp. no child) matching \
+         \"bar\". For instance $(b,user\\(:^email\\)) lists the users without \
+         an $(b,email). (Note the difference with $(b,:!bar), which keeps \
+         directives having $(i,some) child whose name is not \"bar\".)";
+      `P
+        "$(b,@\\(foo.bar\\)) substitutes the value of the sub-query \
+         $(b,foo.bar). It can be used as a pattern, e.g. \
+         $(b,\\(@\\(me.username\\)\\)) selects the top-level directive whose \
+         name is the value of $(b,me.username). $(b,@) is preferred over the \
+         equivalent $(b,$$\\(...\\)) because it is not special inside shell \
+         double quotes.";
     ]
   in
   let info = Cmd.info "query" ~doc ~man in

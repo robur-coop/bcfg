@@ -12,6 +12,9 @@ open Bcfg_query
 %token COMMA
 %token DOT
 %token DOLLAR
+%token STAR
+%token COLON
+%token CARET
 %token EOF
 
 %left OR AND
@@ -24,6 +27,7 @@ open Bcfg_query
 
 let pattern :=
   | ~ = WORD; <PWord>
+  | STAR; { PAny }
   | DOLLAR; LBRACE; ~ = texpr; RBRACE; <PEval>
   | LBRACE; ~ = tpattern; RBRACE; <>
   | a = pattern; OR; b = pattern; { POr (a, b) }
@@ -39,11 +43,15 @@ let tpattern :=
 
 let expr :=
   | ~ = WORD; <EWord>
+  | STAR; { EPattern PAny }
   | LBRACE; ~ = tpattern; RBRACE; %prec LLBRACE <EPattern>
 
 let aexpr :=
   | ~ = expr; <>
   | e = aexpr; LBRACE; p = tpattern; RBRACE; { EParameter (p, e) }
+  | e = aexpr; LBRACE; COLON; p = tpattern; RBRACE; { EChild (p, e) }
+  | e = aexpr; LBRACE; CARET; p = tpattern; RBRACE; { ENot_parameter (p, e) }
+  | e = aexpr; LBRACE; COLON; CARET; p = tpattern; RBRACE; { ENot_child (p, e) }
   | LBRACE; p = tpattern; RBRACE; e = aexpr; %prec LBRACE { EDirective (e, p) }
 
 let texpr :=

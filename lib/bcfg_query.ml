@@ -42,7 +42,8 @@ end
 
 type pattern =
   | PWord of string (* foo *)
-  | PEval of expr (* $(foo) *)
+  | PAny (* * *)
+  | PEval of expr (* @(foo) *)
   | PNot of pattern (* !foo *)
   | PAnd of pattern * pattern (* foo&bar *)
   | POr of pattern * pattern (* foo|bar *)
@@ -50,14 +51,18 @@ type pattern =
 and expr =
   | EGet_parameter of expr * int (* foo[0] *)
   | EGet_subdirective of expr * expr (* foo.bar *)
-  | EDirective of expr * pattern (* foo(bar) *)
+  | EDirective of expr * pattern (* (bar)foo *)
   | EParameter of pattern * expr (* foo(bar) *)
+  | EChild of pattern * expr (* foo(:bar) *)
+  | ENot_parameter of pattern * expr (* foo(^bar): no parameter matches bar *)
+  | ENot_child of pattern * expr (* foo(:^bar): no child matches bar *)
   | EWord of string (* foo *)
   | EPattern of pattern (* (foo) *)
 
 let rec pp_pattern ppf = function
   | PWord s -> Fmt.string ppf s
-  | PEval e -> Fmt.pf ppf "$(%a)" pp_expr e
+  | PAny -> Fmt.string ppf "*"
+  | PEval e -> Fmt.pf ppf "@(%a)" pp_expr e
   | PNot p -> Fmt.pf ppf "!%a" pp_pattern p
   | PAnd (a, b) -> Fmt.pf ppf "%a&%a" pp_pattern a pp_pattern b
   | POr (a, b) -> Fmt.pf ppf "%a|%a" pp_pattern a pp_pattern b
@@ -67,5 +72,8 @@ and pp_expr ppf = function
   | EGet_subdirective (e0, e1) -> Fmt.pf ppf "%a.%a" pp_expr e0 pp_expr e1
   | EDirective (e, p) -> Fmt.pf ppf "(%a)%a" pp_expr e pp_pattern p
   | EParameter (p, e) -> Fmt.pf ppf "%a(%a)" pp_expr e pp_pattern p
+  | EChild (p, e) -> Fmt.pf ppf "%a(:%a)" pp_expr e pp_pattern p
+  | ENot_parameter (p, e) -> Fmt.pf ppf "%a(^%a)" pp_expr e pp_pattern p
+  | ENot_child (p, e) -> Fmt.pf ppf "%a(:^%a)" pp_expr e pp_pattern p
   | EWord s -> Fmt.pf ppf "%S" s
   | EPattern p -> Fmt.pf ppf "(%a)" pp_pattern p

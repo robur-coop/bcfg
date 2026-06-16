@@ -25,6 +25,7 @@ let rec predicate ~root pattern str =
   let open Bcfg_query in
   match pattern with
   | PWord word -> String.equal word str
+  | PAny -> true
   | PEval expr ->
       let ds = eval ~root expr root in
       List.exists (fun d -> String.equal (value_of_directive d) str) ds
@@ -58,6 +59,28 @@ and eval ~root query bcfg =
   | EParameter (p, a) ->
       let pred = predicate ~root p in
       let fn { Bcfg.parameters; _ } = List.exists pred parameters in
+      let bcfg = List.filter fn bcfg in
+      eval ~root a bcfg
+  | EChild (p, a) ->
+      (* keep directives that contain a child whose name matches [p] *)
+      let pred = predicate ~root p in
+      let fn { Bcfg.children; _ } =
+        List.exists (fun c -> pred c.Bcfg.name) children
+      in
+      let bcfg = List.filter fn bcfg in
+      eval ~root a bcfg
+  | ENot_parameter (p, a) ->
+      (* anti-join: keep directives with NO parameter matching [p] *)
+      let pred = predicate ~root p in
+      let fn { Bcfg.parameters; _ } = not (List.exists pred parameters) in
+      let bcfg = List.filter fn bcfg in
+      eval ~root a bcfg
+  | ENot_child (p, a) ->
+      (* anti-join: keep directives with NO child matching [p] *)
+      let pred = predicate ~root p in
+      let fn { Bcfg.children; _ } =
+        not (List.exists (fun c -> pred c.Bcfg.name) children)
+      in
       let bcfg = List.filter fn bcfg in
       eval ~root a bcfg
   | EPattern p ->

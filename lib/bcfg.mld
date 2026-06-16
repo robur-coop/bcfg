@@ -15,16 +15,19 @@ this format does not define any primary value types such as numbers; everything
 is a "string" and must be encoded in UTF-8. Here is a simple example:
 
 {@bcfg[
-dinosaure {
-  website https://din.osau.re
+user dinosaure {
+  website https://din.osau.re/
+  username dinosaure
 }
 
-hannes {
-  website https://hannes.robur.coop
+user hannes admin {
+  website https://hannes.robur.coop/
+  username hannesm
 }
 
-reynir {
+user reynir {
   website https://reyn.ir/
+  username reynir
 }
 
 robur {
@@ -72,4 +75,35 @@ new value, which must be equivalent to the first.
 $ bcfg iso file.cfg
 $ echo $?
 0
+]}
+
+{2 How to manipulate such configuration file?}
+
+At this stage, you might be wondering whether there's a tool that can handle
+this sort of file! And that’s exactly what [bcfg query] is for. It's similar to
+the [jq] tool, but for configuration files:
+
+{@shell[
+$ bcfg query user(dinosaure).website file.cfg
+website https://din.osau.re/
+$ bcfg query user(dinosaure).website[0] file.cfg
+https://din.osau.re/
+$ bcfg query user(dinosaure|hannes).website[0] file.cfg
+https://din.osau.re
+https://hannes.robur.coop/
+$ bcfg query user(@(me.username[0])).website[0] file.cfg
+https://din.osau.re/
+$ bcfg query user(admin|reynir).website[0] file.cfg
+https://hannes.robur.coop/
+https://reyn.ir/
+$ bcfg query user(!dinosaure).username[0] file.cfg
+hannesm
+reynir
+$ bcfg query (&,!user,!me).members.* file.cfg
+hannes
+reynir
+dinosaure
+pixie
+$ bcfg query user(|,$(robur.members.*))(admin).username[0] file.cfg
+hannesm
 ]}
