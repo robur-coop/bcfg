@@ -16,4 +16,6 @@ depends: [
   "logs"
   "cmdliner"
   "menhir"
+  "uutf" {with-test}
+  "crowbar" {with-test}
 ]
