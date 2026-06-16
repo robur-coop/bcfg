@@ -1,0 +1,46 @@
+(ocamllex bcfg_lexer)
+
+(ocamllex bcfg_query_lexer)
+
+(menhir
+ (flags --table --inspection)
+ (modules bcfg_parser))
+
+(menhir
+ (modules bcfg_query_parser))
+
+(rule
+ (targets bcfg_parser_messages.ml)
+ (deps parser.messages bcfg_parser.mly)
+ (action
+  (with-stdout-to
+   %{targets}
+   (run menhir --compile-errors %{deps}))))
+
+(rule
+ (targets parser.messages)
+ (deps bcfg_parser.mly)
+ (action
+  (with-stdout-to
+   %{targets}
+   (run menhir --list-errors %{deps}))))
+
+(library
+ (name bcfg)
+ (public_name bcfg)
+ (modules bcfg bcfg_out bcfg_txtloc bcfg_type bcfg_lexer bcfg_parser
+   bcfg_parser_messages bcfg_stream bcfg_json)
+ (wrapped false)
+ (libraries menhirLib))
+
+(library
+ (name bcfgt)
+ (public_name bcfg.t)
+ (modules bcfgt)
+ (libraries bcfg))
+
+(library
+ (name bcfgq)
+ (public_name bcfg.q)
+ (modules bcfgq bcfg_query bcfg_query_lexer bcfg_query_parser)
+ (libraries bcfg))

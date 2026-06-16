@@ -1,0 +1,10 @@
+dir1 {
+	dir2 {
+		dir3 param1 {
+			dir4
+		}
+	}
+
+	dir5
+}
+

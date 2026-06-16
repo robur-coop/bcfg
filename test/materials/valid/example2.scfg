@@ -1,0 +1,11 @@
+# This is a comment
+server   {
+    listen  80
+    server_name    example.com   www.example.com
+
+    location / {
+        root   /var/www/html
+		index  index.html index.htm
+	}
+}
+

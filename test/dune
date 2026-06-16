@@ -1,0 +1,36 @@
+(cram
+ (deps (source_tree materials/valid) %{bin:bcfg}))
+
+(library
+ (name test)
+ (modules test))
+
+(test
+ (name test_stream)
+ (modules test_stream)
+ (libraries test bcfg))
+
+(test
+ (name test_bcfgt)
+ (modules test_bcfgt)
+ (libraries test bcfg bcfgt))
+
+(test
+ (name test_lexer)
+ (modules test_lexer)
+ (libraries test bcfg))
+
+(test
+ (name test_parser)
+ (modules test_parser)
+ (libraries test bcfg))
+
+(test
+ (name test_json)
+ (modules test_json)
+ (libraries test bcfg))
+
+(test
+ (name test_query)
+ (modules test_query)
+ (libraries test bcfg bcfgq))

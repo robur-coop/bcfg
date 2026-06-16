@@ -1,0 +1,127 @@
+open Bcfgt
+
+let failwithf fmt = Format.kasprintf failwith fmt
+let ok t = function Ok v -> v | Error (`Msg m) -> failwithf "%s: %s" t m
+
+type server = {
+  host : string;
+  port : int;
+  tls : bool;
+  ratio : float;
+  aliases : string list;
+  admin : string option;
+}
+
+let t =
+  let fn host port tls ratio aliases admin =
+    { host; port; tls; ratio; aliases; admin }
+  in
+  directive ~name:"server" fn
+  |> req ~pos:0 string (fun s -> s.host)
+  |> field "port" int (fun s -> s.port)
+  |> field "tls" bool (fun s -> s.tls)
+  |> field "ratio" float (fun s -> s.ratio)
+  |> field "aliases" (list string) (fun s -> s.aliases)
+  |> opt "admin" string ~get:(fun s -> s.admin)
+  |> uniq
+
+exception Bcfg_error of Bcfg.error
+
+let () =
+  Printexc.register_printer @@ function
+  | Bcfg_error err -> Some (Format.asprintf "%a" Bcfg.pp_error_for_human err)
+  | _ -> None
+
+let parse str =
+  match Bcfg.parser (Lexing.from_string str) with
+  | Ok t -> t
+  | Error err -> raise (Bcfg_error err)
+
+let render t = Bcfg.emitter t |> List.of_seq |> String.concat ""
+
+let sample =
+  {
+    host = "example.com";
+    port = 8080;
+    tls = true;
+    ratio = 0.5;
+    aliases = [ "www"; "web" ];
+    admin = Some "root";
+  }
+
+let test_encode_decode =
+  Test.test ~title:"encode/decode" @@ fun () ->
+  let v = ok "decode" (decode t (encode t sample)) in
+  Test.check ~msg:"encode/decode" (sample = v)
+
+let test_textual_roundtrip =
+  Test.test ~title:"encode/decode (with text)" @@ fun () ->
+  let text = render (encode t sample) in
+  let v = ok "decode" (decode t (parse text)) in
+  Test.check ~msg:"textual round-trip" (sample = v)
+
+let test_optional_absent =
+  Test.test ~title:"encode/decode (with absent)" @@ fun () ->
+  let v =
+    {
+      host = "h";
+      port = 1;
+      tls = false;
+      ratio = 1.;
+      aliases = [];
+      admin = None;
+    }
+  in
+  let v' = ok "decode" (decode t (encode t v)) in
+  Test.check ~msg:"absent option/empty list" (v = v')
+
+let test_missing_field =
+  Test.test ~title:"encode/decode (missing)" @@ fun () ->
+  let cfg = parse "server h\n" in
+  match decode t cfg with
+  | Ok _ -> failwith "expected an error for the missing 'port' field"
+  | Error (`Msg _) -> Test.check ~msg:"expected error" true
+
+let test_bad_int =
+  Test.test ~title:"bad int" @@ fun () ->
+  let cfg = parse "server h {\n  port abc\n  tls true\n  ratio 1.\n}\n" in
+  match decode t cfg with
+  | Ok _ -> failwith "expected an error for the invalid integer"
+  | Error (`Msg _) -> Test.check ~msg:"expected error" true
+
+type tree = { label : string; kids : tree list }
+
+let t =
+  fix @@ fun tree ->
+  uniq
+    (directive ~name:"node" (fun label kids -> { label; kids })
+    |> req ~pos:0 string (fun t -> t.label)
+    |> field "kids" (list tree) (fun t -> t.kids))
+
+let test_recursive =
+  Test.test ~title:"recursive" @@ fun () ->
+  let v =
+    {
+      label = "root";
+      kids =
+        [
+          { label = "a"; kids = [ { label = "a1"; kids = [] } ] };
+          { label = "b"; kids = [] };
+        ];
+    }
+  in
+  let v' = ok "decode" (decode t (encode t v)) in
+  Test.check ~msg:"recursive round-trip" (v = v');
+  let v'' = ok "decode" (decode t (parse (render (encode t v)))) in
+  Test.check ~msg:"recursive textual round-trip" (v = v'')
+
+let () =
+  Test.run
+    [
+      test_encode_decode;
+      test_textual_roundtrip;
+      test_optional_absent;
+      test_missing_field;
+      test_bad_int;
+      test_recursive;
+    ]

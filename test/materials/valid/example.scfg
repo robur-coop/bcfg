@@ -1,0 +1,16 @@
+train "Shinkansen" {
+	model "E5" {
+		max-speed 320km/h
+		weight 453.5t
+
+		lines-served "Tōhoku" "Hokkaido"
+	}
+
+	model "E7" {
+		max-speed 275km/h
+		weight 540t
+
+		lines-served "Hokuriku" "Jōetsu"
+	}
+}
+

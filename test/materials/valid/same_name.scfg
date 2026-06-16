@@ -1,0 +1,12 @@
+dir1
+dir2
+dir1 {
+    dir1-2-1
+    dir1-2-2
+    }
+dir3
+dir4 
+dir3 {
+    dir3-1 param
+                            }
+

@@ -1,0 +1,36 @@
+(executable
+ (name bcfg)
+ (public_name bcfg)
+ (package bcfg)
+ (modules bcfg)
+ (libraries bcfg.cli bcfg.validate bcfg.iso bcfg.query bcfg.lint))
+
+(library
+ (name bcfg_validate)
+ (public_name bcfg.validate)
+ (modules bcfg_validate)
+ (libraries threads bcfg.cli bcfg))
+
+(library
+ (name bcfg_iso)
+ (public_name bcfg.iso)
+ (modules bcfg_iso)
+ (libraries bcfg.cli bcfg))
+
+(library
+ (name bcfg_query)
+ (public_name bcfg.query)
+ (modules bcfg_query)
+ (libraries bcfg.cli bcfg bcfgq))
+
+(library
+ (name bcfg_lint)
+ (public_name bcfg.lint)
+ (modules bcfg_lint)
+ (libraries bcfg.cli bcfg))
+
+(library
+ (name bcfg_cli)
+ (public_name bcfg.cli)
+ (modules bcfg_cli)
+ (libraries bcfg fmt.tty fmt.cli logs.fmt logs.cli))
