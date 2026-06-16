@@ -59,7 +59,7 @@ end = struct
   let write str t =
     let max = Bytes.length t.buffer in
     let rec go off_str rem_str t =
-      let len = Int.min (max - t.pos) rem_str in
+      let len = min (max - t.pos) rem_str in
       Bytes.blit_string str off_str t.buffer t.pos len;
       t.pos <- t.pos + len;
       if rem_str > len then flush (go (off_str + len) (rem_str - len)) t

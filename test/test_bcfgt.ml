@@ -115,6 +115,51 @@ let test_recursive =
   let v'' = ok "decode" (decode t (parse (render (encode t v)))) in
   Test.check ~msg:"recursive textual round-trip" (v = v'')
 
+type backend = Tcp of int | Unix of string
+
+let backend =
+  cases ~name:"backend" ~tag:"kind" string
+    [
+      case "tcp"
+        (directive (fun port -> port) |> field "port" int Fun.id)
+        ~inject:(fun p -> Tcp p)
+        ~project:(function Tcp p -> Some p | _ -> None);
+      case "unix"
+        (directive (fun path -> path) |> field "path" string Fun.id)
+        ~inject:(fun p -> Unix p)
+        ~project:(function Unix p -> Some p | _ -> None);
+    ]
+
+let test_cases =
+  Test.test ~title:"cases (sum type)" @@ fun () ->
+  let roundtrip v =
+    let v' = ok "decode" (decode backend (encode backend v)) in
+    Test.check ~msg:"value round-trip" (v = v');
+    let v'' =
+      ok "decode" (decode backend (parse (render (encode backend v))))
+    in
+    Test.check ~msg:"textual round-trip" (v = v'')
+  in
+  roundtrip (Tcp 8080);
+  roundtrip (Unix "/tmp/sock");
+  let v =
+    ok "decode" (decode backend (parse "backend {\n  kind tcp\n  port 80\n}\n"))
+  in
+  Test.check ~msg:"tag selects tcp" (v = Tcp 80);
+  begin match
+    decode backend (parse "backend {\n  kind udp\n  port 80\n}\n")
+  with
+  | Ok _ -> Test.check ~msg:"unknown tag rejected" false
+  | Error (`Msg _) -> Test.check ~msg:"unknown tag rejected" true
+  end
+
+let test_cases_in_list =
+  Test.test ~title:"cases in a list" @@ fun () ->
+  let codec = list backend in
+  let vs = [ Tcp 1; Unix "x"; Tcp 2 ] in
+  let vs' = ok "decode" (decode codec (encode codec vs)) in
+  Test.check ~msg:"list of unions round-trip" (vs = vs')
+
 let () =
   Test.run
     [
@@ -124,4 +169,6 @@ let () =
       test_missing_field;
       test_bad_int;
       test_recursive;
+      test_cases;
+      test_cases_in_list;
     ]

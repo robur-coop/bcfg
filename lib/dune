@@ -44,3 +44,7 @@
  (public_name bcfg.q)
  (modules bcfgq bcfg_query bcfg_query_lexer bcfg_query_parser)
  (libraries bcfg))
+
+(documentation
+ (package bcfg)
+ (mld_files bcfg))

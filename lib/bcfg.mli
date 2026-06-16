@@ -5,6 +5,7 @@ type directive = Bcfg_type.directive = {
 }
 
 type t = Bcfg_type.t
+(** {!page:bcfg}. *)
 
 (* [Txtloc] allows you to locate errors that may occur when manipulating a
    [bcfg] file. You can then contextualize the error and display it using a list

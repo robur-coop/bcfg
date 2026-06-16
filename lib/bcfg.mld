@@ -1,0 +1,5 @@
+{1 bcfg, Boringly simple ConFiGuration file.}
+
+[bcfg] is a format for configuration files, tools for manipulating these files,
+and an OCaml library for processing them. The purpose of this document is to
+introduce new users to this project by showing practical examples of its use.

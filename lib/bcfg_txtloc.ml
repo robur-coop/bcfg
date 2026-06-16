@@ -74,14 +74,13 @@ let errored_line ~txtloc ~line_number line =
       let line = line in
       let pre = String.sub line 0 c in
       let err = String.sub line c (String.length line - c) in
-      Errored_line { err; around = (pre, String.empty) }
+      Errored_line { err; around = (pre, "") }
   | Multiline { stop = line_number', c; _ } when line_number = line_number' ->
       let line = line in
       let err = String.sub line 0 c in
       let nxt = String.sub line c (String.length line - c) in
-      Errored_line { err; around = (String.empty, nxt) }
-  | Multiline _ ->
-      Errored_line { err = line; around = (String.empty, String.empty) }
+      Errored_line { err; around = ("", nxt) }
+  | Multiline _ -> Errored_line { err = line; around = ("", "") }
   | Nowhere -> assert false
 
 let context_line line = Context_line line

@@ -1,5 +1,7 @@
 (cram
- (deps (source_tree materials/valid) %{bin:bcfg}))
+ (deps
+  (source_tree materials/valid)
+  %{bin:bcfg}))
 
 (library
  (name test)

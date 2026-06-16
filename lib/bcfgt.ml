@@ -78,16 +78,6 @@ let rec sequence = function
       let* rest = sequence r in
       Ok (v :: rest)
 
-(* {1 The codec.}
-
-   In [bcfg], values are always strings. Two locations can carry a value:
-   - a {b positional parameter} of the enclosing directive (a scalar), or
-   - a {b named sub-directive} whose first parameter holds the scalar, or whose
-     parameters/children describe a nested record.
-
-   [Scalar] describes the former; [Obj] the latter. [List]/[Option] describe the
-   cardinality of a {b field} (how many sub-directives of a given name may
-   appear). [Map] transforms, [Rec] ties recursive knots. *)
 type 'a t =
   | Scalar : 'a scalar -> 'a t
   | Obj : ('a, 'a) directive -> 'a t
@@ -95,8 +85,25 @@ type 'a t =
   | List : 'a t -> 'a list t
   | Option : 'a t -> 'a option t
   | Rec : 'a t Lazy.t -> 'a t
+  | Cases : ('a, 'tag) cases -> 'a t
 
 and 'a scalar = { sdec : string -> ('a, error) result; senc : 'a -> string }
+
+and ('a, 'tag) cases = {
+  cname : string option;
+  ctag : string;
+  ctagtype : 'tag t;
+  ccases : ('a, 'tag) case list;
+}
+
+and ('a, 'tag) case =
+  | Case : {
+      tag : 'tag;
+      cdir : ('v, 'v) directive;
+      inject : 'v -> 'a;
+      project : 'a -> 'v option;
+    }
+      -> ('a, 'tag) case
 
 and ('r, 'fn) directive = {
   dname : string option;
@@ -232,11 +239,16 @@ let opt fname ?documentation:fdoc ftype ?get directive =
 
 let some directive = List (Obj directive)
 let uniq directive = Obj directive
+let case tag cdir ~inject ~project = Case { tag; cdir; inject; project }
+
+let cases ?name:cname ~tag:ctag ctagtype ccases =
+  Cases { cname; ctag; ctagtype; ccases }
 
 (* {2 Decoding.} *)
 
 let rec top_name : type a. a t -> string option = function
   | Obj { dname; _ } -> dname
+  | Cases { cname; _ } -> cname
   | Map (_, _, inner) -> top_name inner
   | List inner -> top_name inner
   | Option inner -> top_name inner
@@ -249,7 +261,7 @@ let rec decode_string : type a. a t -> string -> (a, error) result =
   | Scalar s -> s.sdec str
   | Map (f, _, inner) -> Result.bind (decode_string inner str) f
   | Rec l -> decode_string (Lazy.force l) str
-  | Obj _ | List _ | Option _ ->
+  | Obj _ | List _ | Option _ | Cases _ ->
       error "expected a scalar value, got a directive"
 
 let rec decode_in : type a. a t -> Bcfg.directive -> (a, error) result =
@@ -260,10 +272,31 @@ let rec decode_in : type a. a t -> Bcfg.directive -> (a, error) result =
       | p :: _ -> s.sdec p
       | [] -> error "directive %S expects a parameter" d.Bcfg.name)
   | Obj dir -> decode_directive dir d
+  | Cases c -> decode_cases c d
   | Map (f, _, inner) -> Result.bind (decode_in inner d) f
   | Rec l -> decode_in (Lazy.force l) d
   | List _ | Option _ ->
       error "unexpected list/option for directive %S" d.Bcfg.name
+
+and decode_cases : type a tag.
+    (a, tag) cases -> Bcfg.directive -> (a, error) result =
+ fun c d ->
+  let matches = List.filter (fun ch -> ch.Bcfg.name = c.ctag) d.Bcfg.children in
+  let* tag =
+    match matches with
+    | [ td ] -> decode_in c.ctagtype td
+    | [] -> error "missing discriminator field %S" c.ctag
+    | _ -> error "discriminator field %S appears more than once" c.ctag
+  in
+  let rec pick = function
+    | [] -> error "no case matches the discriminator value of %S" c.ctag
+    | Case cs :: rest ->
+        if cs.tag = tag then
+          let* v = decode_directive cs.cdir d in
+          Ok (cs.inject v)
+        else pick rest
+  in
+  pick c.ccases
 
 and decode_param : type a. a t -> string option -> (a, error) result =
  fun t str ->
@@ -320,7 +353,7 @@ and decode_directive : type r.
 let rec decode_top : type a. a t -> Bcfg.t -> (a, error) result =
  fun t ds ->
   match t with
-  | Obj dir -> (
+  | Obj dir -> begin
       let ds =
         match dir.dname with
         | Some n -> List.filter (fun d -> d.Bcfg.name = n) ds
@@ -329,7 +362,19 @@ let rec decode_top : type a. a t -> Bcfg.t -> (a, error) result =
       match ds with
       | [ d ] -> decode_directive dir d
       | [] -> error "no matching directive"
-      | _ -> error "expected exactly one directive")
+      | _ -> error "expected exactly one directive"
+    end
+  | Cases c -> begin
+      let ds =
+        match c.cname with
+        | Some n -> List.filter (fun d -> d.Bcfg.name = n) ds
+        | None -> ds
+      in
+      match ds with
+      | [ d ] -> decode_cases c d
+      | [] -> error "no matching directive"
+      | _ -> error "expected exactly one directive"
+    end
   | List inner ->
       let ds =
         match top_name inner with
@@ -337,7 +382,7 @@ let rec decode_top : type a. a t -> Bcfg.t -> (a, error) result =
         | None -> ds
       in
       sequence (List.map (decode_in inner) ds)
-  | Option inner -> (
+  | Option inner -> begin
       let ds =
         match top_name inner with
         | Some n -> List.filter (fun d -> d.Bcfg.name = n) ds
@@ -348,7 +393,8 @@ let rec decode_top : type a. a t -> Bcfg.t -> (a, error) result =
       | [ d ] ->
           let* v = decode_in inner d in
           Ok (Some v)
-      | _ -> error "expected at most one directive")
+      | _ -> error "expected at most one directive"
+    end
   | Map (f, _, inner) -> Result.bind (decode_top inner ds) f
   | Rec l -> decode_top (Lazy.force l) ds
   | Scalar _ -> error "cannot decode a scalar at the top-level"
@@ -364,7 +410,7 @@ let rec enc_scalar : type a. a t -> a -> string =
   | Scalar s -> s.senc v
   | Map (_, bwd, inner) -> enc_scalar inner (bwd v)
   | Rec l -> enc_scalar (Lazy.force l) v
-  | Obj _ | List _ | Option _ ->
+  | Obj _ | List _ | Option _ | Cases _ ->
       invalid_arg "Bcfgt.encode: a positional parameter must be a scalar"
 
 let rec enc_dir : type a. a t -> string -> a -> Bcfg.directive =
@@ -372,10 +418,26 @@ let rec enc_dir : type a. a t -> string -> a -> Bcfg.directive =
   match t with
   | Scalar s -> { Bcfg.name; parameters = [ s.senc v ]; children = [] }
   | Obj dir -> encode_named dir name v
+  | Cases c -> encode_cases c name v
   | Map (_, bwd, inner) -> enc_dir inner name (bwd v)
   | Rec l -> enc_dir (Lazy.force l) name v
   | List _ | Option _ ->
       invalid_arg "Bcfgt.encode: nested list/option handled at field level"
+
+and encode_cases : type a tag. (a, tag) cases -> string -> a -> Bcfg.directive =
+ fun c name v ->
+  let rec pick = function
+    | [] -> invalid_arg "Bcfgt.encode: the value matches no case"
+    | Case cs :: rest ->
+        begin match cs.project v with
+        | Some payload ->
+            let d = encode_named cs.cdir name payload in
+            let tag_child = enc_dir c.ctagtype c.ctag cs.tag in
+            { d with Bcfg.children = tag_child :: d.Bcfg.children }
+        | None -> pick rest
+        end
+  in
+  pick c.ccases
 
 and encode_one_field : type r. r ffield -> r -> Bcfg.directive list =
  fun (Ffield f) v ->
@@ -415,6 +477,13 @@ let rec encode : type a. a t -> a -> Bcfg.t =
         | None -> invalid_arg "Bcfgt.encode: top-level directive without a name"
       in
       [ encode_named dir name v ]
+  | Cases c ->
+      let name =
+        match c.cname with
+        | Some n -> n
+        | None -> invalid_arg "Bcfgt.encode: top-level cases without a name"
+      in
+      [ encode_cases c name v ]
   | List inner -> List.concat_map (encode inner) v
   | Option inner -> ( match v with None -> [] | Some x -> encode inner x)
   | Map (_, bwd, inner) -> encode inner (bwd v)
