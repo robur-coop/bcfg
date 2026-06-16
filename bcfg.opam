@@ -18,4 +18,5 @@ depends: [
   "menhir"
   "uutf" {with-test}
   "crowbar" {with-test}
+  "hxd" {with-test}
 ]
