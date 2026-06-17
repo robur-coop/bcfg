@@ -11,6 +11,32 @@ let of_string str =
 
 let pp = Bcfg_query.pp_expr
 
+(* A query is [is_streamable] when it contains no [@(...)] substitution: such a
+   query never looks outside the current directive's subtree, so it can be
+   evaluated one top-level directive at a time (see {!Bcfg.Stream.to_directives})
+   without materialising the whole document. *)
+let rec eval_in_pattern =
+  let open Bcfg_query in
+  function
+  | PWord _ | PAny -> false
+  | PEval _ -> true
+  | PNot p -> eval_in_pattern p
+  | PAnd (a, b) | POr (a, b) -> eval_in_pattern a || eval_in_pattern b
+
+and eval_in_expr =
+  let open Bcfg_query in
+  function
+  | EWord _ -> false
+  | EPattern p -> eval_in_pattern p
+  | EGet_parameter (e, _) -> eval_in_expr e
+  | EGet_subdirective (a, b) -> eval_in_expr a || eval_in_expr b
+  | EDirective (e, p) -> eval_in_expr e || eval_in_pattern p
+  | EParameter (p, e) | EChild (p, e) | ENot_parameter (p, e) | ENot_child (p, e)
+    ->
+      eval_in_pattern p || eval_in_expr e
+
+let is_streamable query = not (eval_in_expr query)
+
 (* The string value of a directive, as used inside a [$(...)] substitution. As
    noted in the design, [$(foo.bar)] behaves like [foo.bar[0]]: the value is the
    first parameter, and falls back to the directive name when there is none

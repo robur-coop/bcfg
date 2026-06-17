@@ -12,8 +12,25 @@ let run _quiet cfg output_format query input =
   in
   let@ () = finally in
   let lexbuf = Lexing.from_channel ic in
-  let* bcfg = Bcfg.parser lexbuf in
-  let result = Bcfgq.eval query bcfg in
+  let* result =
+    if Bcfgq.is_streamable query then begin
+      (* No [@(...)] substitution: evaluate one top-level directive at a time,
+         without materialising the whole document. *)
+      let exception E of string in
+      let chunks = ref [] in
+      try
+        Seq.iter
+          (function
+            | Ok d -> chunks := Bcfgq.eval query [ d ] :: !chunks
+            | Error e -> raise (E (Format.asprintf "%a" Bcfg.Stream.pp_error e)))
+          (Bcfg.Stream.to_directives lexbuf);
+        Ok (List.concat (List.rev !chunks))
+      with E msg -> Error (`Msg msg)
+    end
+    else
+      let* bcfg = Bcfg.parser lexbuf in
+      Ok (Bcfgq.eval query bcfg)
+  in
   (match output_format with
   | `Bcfg -> Seq.iter (output_string stdout) (Bcfg.emitter ~cfg result)
   | `Json ->

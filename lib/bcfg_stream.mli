@@ -57,3 +57,8 @@ val of_t : Bcfg_type.t -> lexeme Seq.t
 
 val to_t : lexeme Seq.t -> (Bcfg_type.t, error) result
 (** [to_t seq] rebuilds the tree from a lexeme sequence. *)
+
+val to_directives : Lexing.lexbuf -> (Bcfg_type.directive, error) result Seq.t
+(** [to_directives lexbuf] yields the top-level directives one at a time,
+    rebuilt from the lexeme stream. Only a single top-level subtree is held in
+    memory at a time, so a whole (large) document is never materialised. *)

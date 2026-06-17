@@ -162,3 +162,39 @@ let to_t seq =
         end
   in
   go seq
+
+let to_directives lexbuf =
+  let lexemes = to_seq lexbuf in
+  (* Accumulate the lexemes of a single top-level directive (from its [Ds] to the
+     [De] that brings us back to depth 0) then rebuild it with {!to_t}. Only one
+     top-level subtree is held at a time. *)
+  let rec go acc depth seq () =
+    match seq () with
+    | Seq.Nil ->
+        begin match acc with
+        | [] -> Seq.Nil
+        | _ ->
+            let err = `Parser_error (nowhere, "unterminated directive") in
+            Seq.Cons (Error err, fun () -> Seq.Nil)
+        end
+    | Seq.Cons (Error e, _) -> Seq.Cons (Error e, fun () -> Seq.Nil)
+    | Seq.Cons (Ok lx, seq) -> begin
+        let depth =
+          match lx with Os -> depth + 1 | Oe -> depth - 1 | _ -> depth
+        in
+        let acc = lx :: acc in
+        match lx with
+        | De when depth = 0 ->
+            begin match to_t (List.to_seq (List.rev acc)) with
+            | Ok [ d ] -> Seq.Cons (Ok d, go [] 0 seq)
+            | Ok _ ->
+                let err =
+                  `Parser_error (nowhere, "expected a single directive")
+                in
+                Seq.Cons (Error err, fun () -> Seq.Nil)
+            | Error e -> Seq.Cons (Error e, fun () -> Seq.Nil)
+            end
+        | _ -> go acc depth seq ()
+      end
+  in
+  fun () -> go [] 0 lexemes ()

@@ -27,7 +27,6 @@ let samples =
      }\n";
   ]
 
-(* [of_t] then [to_t] must rebuild the very same tree. *)
 let test_of_to =
   Test.test ~title:"of_t/to_t" @@ fun () ->
   List.iter
@@ -38,7 +37,6 @@ let test_of_to =
       | Error e -> failf "to_t: %a" Bcfg.Stream.pp_error e)
     samples
 
-(* The streaming decoder must agree with the tree parser. *)
 let test_stream_matches_parser =
   Test.test ~title:"decoder matches parser" @@ fun () ->
   List.iter
@@ -47,7 +45,6 @@ let test_stream_matches_parser =
       Test.check ~msg:s (expected = stream_of s))
     samples
 
-(* Round-trip through the streaming encoder must be an isomorphism. *)
 let test_iso_stream =
   Test.test ~title:"encode isomorphism" @@ fun () ->
   List.iter
@@ -60,8 +57,6 @@ let test_iso_stream =
       Test.check ~msg:s (t = parse rendered))
     samples
 
-(* Deep nesting must not blow up: the footprint is the depth, and decoding stays
-   lazy/iterative. *)
 let test_deep =
   Test.test ~title:"deep nesting" @@ fun () ->
   let depth = 2000 in
@@ -81,12 +76,22 @@ let test_deep =
   | Ok t -> Test.check ~msg:"deep round-trip" (parse s = t)
   | Error e -> failf "deep to_t: %a" Bcfg.Stream.pp_error e
 
-(* A leaf directive without a trailing newline (EOF) is tolerated. *)
 let test_eof_leniency =
   Test.test ~title:"eof leniency" @@ fun () ->
   Test.check ~msg:"leaf at eof"
     ([ Bcfg.Stream.Ds "foo"; Bcfg.Stream.P "bar"; Bcfg.Stream.De ]
     = stream_of "foo bar")
+
+let directives_of s =
+  Bcfg.Stream.to_directives (Lexing.from_string s)
+  |> Seq.map (function
+    | Ok d -> d
+    | Error e -> failf "to_directives: %a" Bcfg.Stream.pp_error e)
+  |> List.of_seq
+
+let test_to_directives =
+  Test.test ~title:"to_directives" @@ fun () ->
+  List.iter (fun s -> Test.check ~msg:s (parse s = directives_of s)) samples
 
 let () =
   Test.run
@@ -96,4 +101,5 @@ let () =
       test_iso_stream;
       test_deep;
       test_eof_leniency;
+      test_to_directives;
     ]
