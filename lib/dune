@@ -35,7 +35,7 @@
 
 (library
  (name bcfgt)
- (public_name bcfg.t)
+ (public_name bcfgt)
  (modules bcfgt)
  (libraries bcfg))
 

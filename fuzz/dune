@@ -1,5 +1,6 @@
 (test
  (name fuzz)
+ (package bcfg)
  (ocamlopt_flags
   (:standard -afl-instrument))
  (libraries hxd.string hxd.core crowbar uutf bcfg))

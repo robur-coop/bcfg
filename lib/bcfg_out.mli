@@ -15,6 +15,7 @@ module Writer : sig
 end
 
 type cfg
+(** Type for output configuration values. *)
 
 val config :
   ?margin:int ->
@@ -24,8 +25,11 @@ val config :
   ?hex:[ `Lower | `Upper ] ->
   unit ->
   cfg
+(** [config ()] allows you to define a configuration for how to generate a
+    {b bcfg} configuration file. *)
 
 val emitter : cfg:cfg -> Bcfg_type.t -> Writer.ctx -> Writer.t
+(** [emitter ~cfg bcfg ctx] creates a writer's state. *)
 
 val lexeme_emitter :
   cfg:cfg -> (unit -> Bcfg_type.Stream.lexeme option) -> Writer.ctx -> Writer.t

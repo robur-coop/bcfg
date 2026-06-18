@@ -16,6 +16,7 @@
 (test
  (name test_bcfgt)
  (modules test_bcfgt)
+ (package bcfgt)
  (libraries test bcfg bcfgt))
 
 (test

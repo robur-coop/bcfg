@@ -21,10 +21,12 @@ type error =
   | `Parser_error of Bcfg_txtloc.t * string ]
 
 val pp_error : Format.formatter -> error -> unit
+(** Pretty-printer for {!type:error} values. *)
 
 (** {1 Decoding.} *)
 
 type decoder
+(** Type of decoders. *)
 
 val decoder : Lexing.lexbuf -> decoder
 (** [decoder lexbuf] creates a streaming decoder pulling tokens from [lexbuf].

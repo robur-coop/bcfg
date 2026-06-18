@@ -34,7 +34,7 @@ module Txtloc : sig
       the input is not seekable (e.g. standard input). *)
 end
 
-(** {1 Configuration file parser.}
+(** {1 Errors.}
 
     The parser offered by [bcfg] comes from [menhir]. It allows us to implement
     a parser according to a grammatical specification. The advantage of [menhir]
@@ -78,12 +78,16 @@ type error =
     Txtloc.t * [ `Invalid_character of char | `Message of string ]
   | `Parser_error of Txtloc.t * (Error.state * Error.t) option
   | `Rejected ]
+(** Type of errors. *)
 
 val pp_error_for_human : Format.formatter -> error -> unit
+(** Simple pretty-printer for {!type:error} values. *)
+
 val parser : Lexing.lexbuf -> (t, [> error ]) result
 
 module Out : sig
   type cfg
+  (** Type for output configuration values. *)
 
   val config :
     ?margin:int ->
@@ -93,6 +97,9 @@ module Out : sig
     ?hex:[ `Lower | `Upper ] ->
     unit ->
     cfg
+
+  (** [config ()] allows you to define a configuration for how to generate a
+      {b bcfg} configuration file. *)
 end
 
 val emitter : ?cfg:Out.cfg -> t -> string Seq.t
