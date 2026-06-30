@@ -111,7 +111,16 @@ and ('r, 'fn) directive = {
   iparams : 'r pfield I.t;
   fields : 'r ffield S.t;
   forder : string list;
+  flags : 'r flagfield S.t;
+  florder : string list;
   decoder : ('r, 'fn) decoder;
+}
+
+and 'r flagfield = {
+  flname : string;
+  flwit : bool Type.Id.m;
+  flget : 'r -> bool;
+  fldoc : string option;
 }
 
 and 'r pfield = Pfield : ('a, 'r) param -> 'r pfield
@@ -201,6 +210,8 @@ let directive ?name:dname ?documentation:ddoc fn =
     iparams = I.empty;
     fields = S.empty;
     forder = [];
+    flags = S.empty;
+    florder = [];
     decoder = Fun fn;
   }
 
@@ -235,6 +246,16 @@ let opt fname ?documentation:fdoc ftype ?get directive =
     fields = S.add fname field directive.fields;
     forder = fname :: directive.forder;
     decoder = App (directive.decoder, fwit);
+  }
+
+let flag flname ?documentation:fldoc flget directive =
+  let flwit = Type.Id.create () in
+  let field = { flname; flwit; flget; fldoc } in
+  {
+    directive with
+    flags = S.add flname field directive.flags;
+    florder = flname :: directive.florder;
+    decoder = App (directive.decoder, flwit);
   }
 
 let some directive = List (Obj directive)
@@ -329,13 +350,22 @@ and decode_field : type a.
 and decode_directive : type r.
     (r, r) directive -> Bcfg.directive -> (r, error) result =
  fun dir d ->
+  let positional =
+    List.filter (fun p -> not (S.mem p dir.flags)) d.Bcfg.parameters
+  in
   let* hmap =
     I.fold
       (fun idx (Pfield p) acc ->
         let* hmap = acc in
-        let* v = decode_param p.ptype (List.nth_opt d.Bcfg.parameters idx) in
+        let* v = decode_param p.ptype (List.nth_opt positional idx) in
         Ok (Hmap.add p.pwit v hmap))
       dir.iparams (Ok Hmap.empty)
+  in
+  let hmap =
+    S.fold
+      (fun flname f hmap ->
+        Hmap.add f.flwit (List.mem flname d.Bcfg.parameters) hmap)
+      dir.flags hmap
   in
   let* hmap =
     S.fold
@@ -459,6 +489,13 @@ and encode_named : type r. (r, r) directive -> string -> r -> Bcfg.directive =
   let parameters =
     I.bindings dir.iparams
     |> List.concat_map (fun (_, pfield) -> encode_one_param pfield v)
+  in
+  let parameters =
+    parameters
+    @ (List.rev dir.florder
+      |> List.filter_map (fun flname ->
+          let f = S.find flname dir.flags in
+          if f.flget v then Some flname else None))
   in
   let children =
     List.rev dir.forder

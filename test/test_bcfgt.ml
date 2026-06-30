@@ -160,6 +160,29 @@ let test_cases_in_list =
   let vs' = ok "decode" (decode codec (encode codec vs)) in
   Test.check ~msg:"list of unions round-trip" (vs = vs')
 
+type user = { username : string; admin : bool }
+
+let user =
+  uniq
+    (directive ~name:"user" (fun username admin -> { username; admin })
+    |> req ~pos:0 string (fun u -> u.username)
+    |> flag "admin" (fun u -> u.admin))
+
+let test_flag =
+  Test.test ~title:"flag (positional marker)" @@ fun () ->
+  let decode_user s = ok "decode" (decode user (parse s)) in
+  Test.check ~msg:"flag after"
+    (decode_user "user hannes admin {\n}\n"
+    = { username = "hannes"; admin = true });
+  Test.check ~msg:"flag before"
+    (decode_user "user admin hannes {\n}\n"
+    = { username = "hannes"; admin = true });
+  Test.check ~msg:"flag absent"
+    (decode_user "user reynir {\n}\n" = { username = "reynir"; admin = false });
+  let v = { username = "dinosaure"; admin = true } in
+  Test.check ~msg:"decode/encode"
+    (decode user (parse (render (encode user v))) = Ok v)
+
 let () =
   Test.run
     [
@@ -171,4 +194,5 @@ let () =
       test_recursive;
       test_cases;
       test_cases_in_list;
+      test_flag;
     ]

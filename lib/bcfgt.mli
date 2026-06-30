@@ -85,6 +85,22 @@ val opt :
   ('r, 'v) directive
 (** [opt name t d] adds an optional sub-directive named [name]. *)
 
+val flag :
+  string ->
+  ?documentation:string ->
+  ('r -> bool) ->
+  ('r, bool -> 'v) directive ->
+  ('r, 'v) directive
+(** [flag name get d] adds a boolean parameter that is [true] iff the token
+    [name] appears among the directive's positional parameters, regardless of
+    its position. Unlike {!req}, it does not occupy a positional slot:
+    parameters declared with {!req} are indexed over the remaining (non-flag)
+    tokens, so both [foo as_user bar] and [foo bar as_user] decode identically.
+    On encoding, [name] is appended to the parameters when [get] returns [true].
+
+    The marker is matched literally: a positional parameter whose value happens
+    to equal [name] is treated as the flag. *)
+
 val some : ('a, 'a) directive -> 'a list t
 (** [some d] is the codec of a (possibly empty) list of [d] directives. *)
 
