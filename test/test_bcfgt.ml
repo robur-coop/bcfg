@@ -25,6 +25,8 @@ let t =
   |> opt "admin" string ~get:(fun s -> s.admin)
   |> uniq
 
+let server_codec = t
+
 exception Bcfg_error of Bcfg.error
 
 let () =
@@ -183,9 +185,29 @@ let test_flag =
   Test.check ~msg:"decode/encode"
     (decode user (parse (render (encode user v))) = Ok v)
 
+let test_error_context =
+  Test.test ~title:"error messages carry a path" @@ fun () ->
+  let msg = function Ok _ -> "<ok>" | Error (`Msg m) -> m in
+  let m_bad_int =
+    msg
+      (decode server_codec
+         (parse "server h {\n  port abc\n  tls true\n  ratio 1.\n}\n"))
+  in
+  Test.check ~msg:"bad int path"
+    (m_bad_int = "server > port: \"abc\" is not a valid integer");
+  let m_missing =
+    msg (decode server_codec (parse "server h {\n  port 1\n  ratio 1.\n}\n"))
+  in
+  Test.check ~msg:"missing field path"
+    (m_missing = "server > tls: missing field \"tls\"");
+  let m_top = msg (decode server_codec (parse "other x {\n}\n")) in
+  Test.check ~msg:"top-level path"
+    (m_top = "server: no directive \"server\" found at the top-level")
+
 let () =
   Test.run
     [
+      test_error_context;
       test_encode_decode;
       test_textual_roundtrip;
       test_optional_absent;

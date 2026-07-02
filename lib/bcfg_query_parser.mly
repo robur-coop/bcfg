@@ -3,7 +3,6 @@ open Bcfg_query
 %}
 
 %token<string> WORD
-%token<int> NUMBER
 %token LBRACE
 %token RBRACE
 %token LBRACK
@@ -57,6 +56,6 @@ let aexpr :=
 let texpr :=
   | ~ = aexpr; <>
   | a = texpr; DOT; b = aexpr; { EGet_subdirective (a, b) }
-  | e = texpr; LBRACK; idx = NUMBER; RBRACK; { EGet_parameter (e, idx) }
+  | e = texpr; LBRACK; idx = WORD; RBRACK; { EGet_parameter (e, idx) }
 
 let query := ~ = texpr; EOF; <>

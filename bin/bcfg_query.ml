@@ -119,8 +119,15 @@ let cmd =
          $(b,foo.bar). It can be used as a pattern, e.g. \
          $(b,\\(@\\(me.username\\)\\)) selects the top-level directive whose \
          name is the value of $(b,me.username). $(b,@) is preferred over the \
-         equivalent $(b,$$\\(...\\)) because it is not special inside shell \
+         equivalent $(b,\\$\\(...\\)) because it is not special inside shell \
          double quotes.";
+      `P
+        "Words follow the same lexical rules as the configuration format \
+         itself: a value containing characters that are meaningful to the \
+         query language (dots, slashes, brackets, ...) must be quoted with \
+         $(b,'...') or $(b,\"...\"), e.g. \
+         $(b,server\\('www.example.org'\\).listen). Single quotes are handy \
+         inside shell double quotes.";
     ]
   in
   let info = Cmd.info "query" ~doc ~man in

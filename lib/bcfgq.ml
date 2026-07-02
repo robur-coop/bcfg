@@ -1,13 +1,46 @@
 module Bcfg_query = Bcfg_query
 
+let error_msgf fmt = Format.kasprintf (fun msg -> Error (`Msg msg)) fmt
+
+(* An index ([foo[0]]) is lexed as a plain word: it is up to us to check that
+   it is a valid number. The walk rejects the query upfront so that {!eval}
+   never has to deal with an invalid (or overflowing) index. *)
+let rec validate_pattern =
+  let open Bcfg_query in
+  function
+  | PWord _ | PAny -> Ok ()
+  | PEval e -> validate_expr e
+  | PNot p -> validate_pattern p
+  | PAnd (a, b) | POr (a, b) ->
+      Result.bind (validate_pattern a) (fun () -> validate_pattern b)
+
+and validate_expr =
+  let open Bcfg_query in
+  function
+  | EWord _ -> Ok ()
+  | EPattern p -> validate_pattern p
+  | EGet_parameter (e, idx) ->
+      begin match int_of_string_opt idx with
+      | Some n when n >= 0 -> validate_expr e
+      | _ -> Error (`Msg (Printf.sprintf "Invalid index %S in the query" idx))
+      end
+  | EGet_subdirective (a, b) ->
+      Result.bind (validate_expr a) (fun () -> validate_expr b)
+  | EDirective (e, p) ->
+      Result.bind (validate_expr e) (fun () -> validate_pattern p)
+  | EParameter (p, e) | EChild (p, e) | ENot_parameter (p, e) | ENot_child (p, e)
+    ->
+      Result.bind (validate_pattern p) (fun () -> validate_expr e)
+
 let of_string str =
   let lexbuf = Lexing.from_string str in
   match Bcfg_query_parser.query Bcfg_query_lexer.token lexbuf with
-  | query -> Ok query
-  | exception Bcfg_query_parser.Error ->
-      Error (`Msg (Printf.sprintf "Invalid query: %S" str))
+  | query -> Result.bind (validate_expr query) (fun () -> Ok query)
+  | exception Bcfg_query_parser.Error -> error_msgf "Invalid query: %S" str
   | exception Bcfg_query_lexer.Unexpected_character chr ->
-      Error (`Msg (Printf.sprintf "Invalid character %C in the query" chr))
+      error_msgf "Invalid character %C in the query" chr
+  | exception Bcfg_query_lexer.Unterminated_quote ->
+      error_msgf "Unterminated quote in the query: %S" str
 
 let pp = Bcfg_query.pp_expr
 
@@ -69,14 +102,19 @@ and eval ~root query bcfg =
       let bcfg = eval ~root a bcfg in
       let fn { Bcfg.children; _ } = eval ~root b children in
       List.concat_map fn bcfg
-  | EGet_parameter (a, idx) ->
+  | EGet_parameter (a, idx) -> begin
       let bcfg = eval ~root a bcfg in
-      let fn { Bcfg.parameters; children; _ } =
-        match List.nth_opt parameters idx with
-        | Some name -> Some { Bcfg.name; parameters = []; children }
-        | None -> None
-      in
-      List.filter_map fn bcfg
+      (* [idx] was checked by [validate_expr]: it is a valid number. *)
+      match int_of_string_opt idx with
+      | None -> []
+      | Some idx ->
+          let fn { Bcfg.parameters; children; _ } =
+            match List.nth_opt parameters idx with
+            | Some name -> Some { Bcfg.name; parameters = []; children }
+            | None -> None
+          in
+          List.filter_map fn bcfg
+    end
   | EDirective (a, p) ->
       let pred = predicate ~root p in
       let fn { Bcfg.name; _ } = pred name in

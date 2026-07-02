@@ -6,6 +6,9 @@
 module S = Map.Make (String)
 module I = Map.Make (Int)
 
+let kstr fn fmt = Format.kasprintf fn fmt
+let error_msgf fmt = kstr (fun msg -> Error (`Msg msg)) fmt
+
 (* {1 Heterogeneous map keyed by type witnesses.}
 
    Used to collect the decoded value of each parameter/field, regardless of the
@@ -68,7 +71,7 @@ let rec apply : type r fn. (r, fn) decoder -> Hmap.t -> fn =
 
 type error = [ `Msg of string ]
 
-let error fmt = Format.kasprintf (fun msg -> Error (`Msg msg)) fmt
+let error fmt = kstr (fun msg -> Error (`Msg msg)) fmt
 let ( let* ) = Result.bind
 
 let rec sequence = function
@@ -276,80 +279,114 @@ let rec top_name : type a. a t -> string option = function
   | Rec l -> top_name (Lazy.force l)
   | Scalar _ -> None
 
-let rec decode_string : type a. a t -> string -> (a, error) result =
- fun t str ->
-  match t with
-  | Scalar s -> s.sdec str
-  | Map (f, _, inner) -> Result.bind (decode_string inner str) f
-  | Rec l -> decode_string (Lazy.force l) str
-  | Obj _ | List _ | Option _ | Cases _ ->
-      error "expected a scalar value, got a directive"
+(* {3 Error context.}
 
-let rec decode_in : type a. a t -> Bcfg.directive -> (a, error) result =
- fun t d ->
+   The parsed {!Bcfg.directive} carries no source location, so we cannot point
+   at a line/column. Instead we accumulate a structural breadcrumb as we descend
+   into the configuration (directive, field, positional parameter, ...) and
+   prefix every error with that path, so the reader knows {b where} decoding
+   failed, not just {b what} failed. The breadcrumb is kept innermost-first. *)
+
+let path ctx =
+  let seg = function
+    | `Dir n -> n
+    | `Field n -> n
+    | `Param i -> Printf.sprintf "#%d" i
+  in
+  String.concat " > " (List.rev_map seg ctx)
+
+let fail ctx fmt =
+  kstr
+    (fun msg ->
+      match ctx with
+      | [] -> Error (`Msg msg)
+      | _ -> error_msgf "%s: %s" (path ctx) msg)
+    fmt
+
+(* Re-attach the current context to an error raised by a context-less codec
+   (scalar [sdec], [enum], user {!map}). *)
+let in_ctx ctx = function Ok _ as ok -> ok | Error (`Msg m) -> fail ctx "%s" m
+
+let rec decode_string : type a. _ -> a t -> string -> (a, error) result =
+ fun ctx t str ->
+  match t with
+  | Scalar s -> in_ctx ctx (s.sdec str)
+  | Map (f, _, inner) ->
+      let* v = decode_string ctx inner str in
+      in_ctx ctx (f v)
+  | Rec l -> decode_string ctx (Lazy.force l) str
+  | Obj _ | List _ | Option _ | Cases _ ->
+      fail ctx "expected a scalar value, but a sub-directive is required here"
+
+let rec decode_in : type a. _ -> a t -> Bcfg.directive -> (a, error) result =
+ fun ctx t d ->
   match t with
   | Scalar s -> (
       match d.Bcfg.parameters with
-      | p :: _ -> s.sdec p
-      | [] -> error "directive %S expects a parameter" d.Bcfg.name)
-  | Obj dir -> decode_directive dir d
-  | Cases c -> decode_cases c d
-  | Map (f, _, inner) -> Result.bind (decode_in inner d) f
-  | Rec l -> decode_in (Lazy.force l) d
+      | p :: _ -> in_ctx ctx (s.sdec p)
+      | [] -> fail ctx "directive %S expects a parameter" d.Bcfg.name)
+  | Obj dir -> decode_directive ctx dir d
+  | Cases c -> decode_cases ctx c d
+  | Map (f, _, inner) ->
+      let* v = decode_in ctx inner d in
+      in_ctx ctx (f v)
+  | Rec l -> decode_in ctx (Lazy.force l) d
   | List _ | Option _ ->
-      error "unexpected list/option for directive %S" d.Bcfg.name
+      fail ctx "unexpected list/option for directive %S" d.Bcfg.name
 
 and decode_cases : type a tag.
-    (a, tag) cases -> Bcfg.directive -> (a, error) result =
- fun c d ->
+    _ -> (a, tag) cases -> Bcfg.directive -> (a, error) result =
+ fun ctx c d ->
   let matches = List.filter (fun ch -> ch.Bcfg.name = c.ctag) d.Bcfg.children in
   let* tag =
     match matches with
-    | [ td ] -> decode_in c.ctagtype td
-    | [] -> error "missing discriminator field %S" c.ctag
-    | _ -> error "discriminator field %S appears more than once" c.ctag
+    | [ td ] -> decode_in (`Field c.ctag :: ctx) c.ctagtype td
+    | [] -> fail ctx "missing discriminator field %S" c.ctag
+    | _ -> fail ctx "discriminator field %S appears more than once" c.ctag
   in
   let rec pick = function
-    | [] -> error "no case matches the discriminator value of %S" c.ctag
+    | [] -> fail ctx "no case matches the value of the discriminator %S" c.ctag
     | Case cs :: rest ->
         if cs.tag = tag then
-          let* v = decode_directive cs.cdir d in
+          let* v = decode_directive ctx cs.cdir d in
           Ok (cs.inject v)
         else pick rest
   in
   pick c.ccases
 
-and decode_param : type a. a t -> string option -> (a, error) result =
- fun t str ->
+and decode_param : type a. _ -> a t -> string option -> (a, error) result =
+ fun ctx t str ->
   match (t, str) with
   | Option _, None -> Ok None
   | Option inner, Some s ->
-      let* v = decode_string inner s in
+      let* v = decode_string ctx inner s in
       Ok (Some v)
-  | _, Some s -> decode_string t s
-  | _, None -> error "missing positional parameter"
+  | _, Some s -> decode_string ctx t s
+  | _, None -> fail ctx "missing positional parameter"
 
 and decode_field : type a.
-    a t -> string -> Bcfg.directive list -> (a, error) result =
- fun t name matches ->
+    _ -> a t -> string -> Bcfg.directive list -> (a, error) result =
+ fun ctx t name matches ->
   match t with
   | Option inner -> (
       match matches with
       | [] -> Ok None
       | [ d ] ->
-          let* v = decode_in inner d in
+          let* v = decode_in ctx inner d in
           Ok (Some v)
-      | _ -> error "field %S appears more than once" name)
-  | List inner -> sequence (List.map (decode_in inner) matches)
+      | _ -> fail ctx "field %S appears more than once" name)
+  | List inner ->
+      sequence
+        (List.mapi (fun i d -> decode_in (`Param i :: ctx) inner d) matches)
   | other -> (
       match matches with
-      | [ d ] -> decode_in other d
-      | [] -> error "missing field %S" name
-      | _ -> error "field %S appears more than once" name)
+      | [ d ] -> decode_in ctx other d
+      | [] -> fail ctx "missing field %S" name
+      | _ -> fail ctx "field %S appears more than once" name)
 
 and decode_directive : type r.
-    (r, r) directive -> Bcfg.directive -> (r, error) result =
- fun dir d ->
+    _ -> (r, r) directive -> Bcfg.directive -> (r, error) result =
+ fun ctx dir d ->
   let positional =
     List.filter (fun p -> not (S.mem p dir.flags)) d.Bcfg.parameters
   in
@@ -357,7 +394,9 @@ and decode_directive : type r.
     I.fold
       (fun idx (Pfield p) acc ->
         let* hmap = acc in
-        let* v = decode_param p.ptype (List.nth_opt positional idx) in
+        let* v =
+          decode_param (`Param idx :: ctx) p.ptype (List.nth_opt positional idx)
+        in
         Ok (Hmap.add p.pwit v hmap))
       dir.iparams (Ok Hmap.empty)
   in
@@ -374,36 +413,48 @@ and decode_directive : type r.
         let matches =
           List.filter (fun c -> c.Bcfg.name = fname) d.Bcfg.children
         in
-        let* v = decode_field f.ftype fname matches in
+        let* v = decode_field (`Field fname :: ctx) f.ftype fname matches in
         Ok (Hmap.add f.fwit v hmap))
       dir.fields (Ok hmap)
   in
   Ok (apply dir.decoder hmap)
 
-let rec decode_top : type a. a t -> Bcfg.t -> (a, error) result =
- fun t ds ->
+let rec decode_top : type a. _ -> a t -> Bcfg.t -> (a, error) result =
+ fun ctx t ds ->
   match t with
   | Obj dir -> begin
-      let ds =
+      let ds, ctx =
         match dir.dname with
-        | Some n -> List.filter (fun d -> d.Bcfg.name = n) ds
-        | None -> ds
+        | Some n -> (List.filter (fun d -> d.Bcfg.name = n) ds, `Dir n :: ctx)
+        | None -> (ds, ctx)
       in
       match ds with
-      | [ d ] -> decode_directive dir d
-      | [] -> error "no matching directive"
-      | _ -> error "expected exactly one directive"
+      | [ d ] -> decode_directive ctx dir d
+      | [] ->
+          fail ctx "no directive%s found at the top-level"
+            (match dir.dname with
+            | Some n -> Printf.sprintf " %S" n
+            | None -> "")
+      | _ ->
+          fail ctx "expected exactly one directive%s, but several were found"
+            (match dir.dname with
+            | Some n -> Printf.sprintf " %S" n
+            | None -> "")
     end
   | Cases c -> begin
-      let ds =
+      let ds, ctx =
         match c.cname with
-        | Some n -> List.filter (fun d -> d.Bcfg.name = n) ds
-        | None -> ds
+        | Some n -> (List.filter (fun d -> d.Bcfg.name = n) ds, `Dir n :: ctx)
+        | None -> (ds, ctx)
       in
       match ds with
-      | [ d ] -> decode_cases c d
-      | [] -> error "no matching directive"
-      | _ -> error "expected exactly one directive"
+      | [ d ] -> decode_cases ctx c d
+      | [] ->
+          fail ctx "no directive%s found at the top-level"
+            (match c.cname with Some n -> Printf.sprintf " %S" n | None -> "")
+      | _ ->
+          fail ctx "expected exactly one directive%s, but several were found"
+            (match c.cname with Some n -> Printf.sprintf " %S" n | None -> "")
     end
   | List inner ->
       let ds =
@@ -411,26 +462,37 @@ let rec decode_top : type a. a t -> Bcfg.t -> (a, error) result =
         | Some n -> List.filter (fun d -> d.Bcfg.name = n) ds
         | None -> ds
       in
-      sequence (List.map (decode_in inner) ds)
+      sequence
+        (List.mapi
+           (fun i d ->
+             let ctx =
+               match top_name inner with
+               | Some n -> `Param i :: `Dir n :: ctx
+               | None -> `Param i :: ctx
+             in
+             decode_in ctx inner d)
+           ds)
   | Option inner -> begin
-      let ds =
+      let ds, ctx =
         match top_name inner with
-        | Some n -> List.filter (fun d -> d.Bcfg.name = n) ds
-        | None -> ds
+        | Some n -> (List.filter (fun d -> d.Bcfg.name = n) ds, `Dir n :: ctx)
+        | None -> (ds, ctx)
       in
       match ds with
       | [] -> Ok None
       | [ d ] ->
-          let* v = decode_in inner d in
+          let* v = decode_in ctx inner d in
           Ok (Some v)
-      | _ -> error "expected at most one directive"
+      | _ -> fail ctx "expected at most one directive, but several were found"
     end
-  | Map (f, _, inner) -> Result.bind (decode_top inner ds) f
-  | Rec l -> decode_top (Lazy.force l) ds
-  | Scalar _ -> error "cannot decode a scalar at the top-level"
+  | Map (f, _, inner) ->
+      let* v = decode_top ctx inner ds in
+      in_ctx ctx (f v)
+  | Rec l -> decode_top ctx (Lazy.force l) ds
+  | Scalar _ -> fail ctx "cannot decode a scalar at the top-level"
 
 let decode t ds =
-  match decode_top t ds with Ok v -> Ok v | Error (`Msg _ as e) -> Error e
+  match decode_top [] t ds with Ok v -> Ok v | Error (`Msg _ as e) -> Error e
 
 (* {2 Encoding.} *)
 

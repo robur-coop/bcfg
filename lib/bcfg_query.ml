@@ -49,7 +49,7 @@ type pattern =
   | POr of pattern * pattern (* foo|bar *)
 
 and expr =
-  | EGet_parameter of expr * int (* foo[0] *)
+  | EGet_parameter of expr * string (* foo[0] *)
   | EGet_subdirective of expr * expr (* foo.bar *)
   | EDirective of expr * pattern (* (bar)foo *)
   | EParameter of pattern * expr (* foo(bar) *)
@@ -59,21 +59,49 @@ and expr =
   | EWord of string (* foo *)
   | EPattern of pattern (* (foo) *)
 
+let is_safe_char = function
+  | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '{' | '}' | '~' -> true
+  | _ -> false
+
+let is_safe str =
+  let res = ref (String.length str > 0) in
+  String.iter (fun chr -> if not (is_safe_char chr) then res := false) str;
+  !res
+
+let pp_word ppf str =
+  if is_safe str then Fmt.string ppf str
+  else begin
+    Fmt.string ppf "'";
+    String.iter
+      (fun chr ->
+        match chr with
+        | '\'' -> Fmt.string ppf "\\'"
+        | '\\' -> Fmt.string ppf "\\\\"
+        | ' ' .. '~' -> Format.pp_print_char ppf chr
+        | chr -> Fmt.pf ppf "\\x%02x" (Char.code chr))
+      str;
+    Fmt.string ppf "'"
+  end
+
 let rec pp_pattern ppf = function
-  | PWord s -> Fmt.string ppf s
+  | PWord s -> pp_word ppf s
   | PAny -> Fmt.string ppf "*"
   | PEval e -> Fmt.pf ppf "@(%a)" pp_expr e
-  | PNot p -> Fmt.pf ppf "!%a" pp_pattern p
-  | PAnd (a, b) -> Fmt.pf ppf "%a&%a" pp_pattern a pp_pattern b
-  | POr (a, b) -> Fmt.pf ppf "%a|%a" pp_pattern a pp_pattern b
+  | PNot p -> Fmt.pf ppf "!%a" pp_pattern_atom p
+  | PAnd (a, b) -> Fmt.pf ppf "%a&%a" pp_pattern a pp_pattern_atom b
+  | POr (a, b) -> Fmt.pf ppf "%a|%a" pp_pattern a pp_pattern_atom b
+
+and pp_pattern_atom ppf = function
+  | (PAnd _ | POr _) as p -> Fmt.pf ppf "(%a)" pp_pattern p
+  | p -> pp_pattern ppf p
 
 and pp_expr ppf = function
-  | EGet_parameter (e, idx) -> Fmt.pf ppf "%a[%d]" pp_expr e idx
+  | EGet_parameter (e, idx) -> Fmt.pf ppf "%a[%a]" pp_expr e pp_word idx
   | EGet_subdirective (e0, e1) -> Fmt.pf ppf "%a.%a" pp_expr e0 pp_expr e1
-  | EDirective (e, p) -> Fmt.pf ppf "(%a)%a" pp_expr e pp_pattern p
+  | EDirective (e, p) -> Fmt.pf ppf "(%a)%a" pp_pattern p pp_expr e
   | EParameter (p, e) -> Fmt.pf ppf "%a(%a)" pp_expr e pp_pattern p
   | EChild (p, e) -> Fmt.pf ppf "%a(:%a)" pp_expr e pp_pattern p
   | ENot_parameter (p, e) -> Fmt.pf ppf "%a(^%a)" pp_expr e pp_pattern p
   | ENot_child (p, e) -> Fmt.pf ppf "%a(:^%a)" pp_expr e pp_pattern p
-  | EWord s -> Fmt.pf ppf "%S" s
+  | EWord s -> pp_word ppf s
   | EPattern p -> Fmt.pf ppf "(%a)" pp_pattern p

@@ -14,6 +14,8 @@ let cfg =
   parse
     "me {\n\
     \  username dinosaure\n\
+    \  website https://din.osau.re/\n\
+    \  uid 1000\n\
      }\n\
      account dinosaure {\n\
     \  service github\n\
@@ -86,6 +88,41 @@ let test_antijoin =
   Test.check ~msg:"account(^dinosaure)"
     ([ "hannes" ] = names_of (run "account(^dinosaure)[0]"))
 
+let test_quoting =
+  Test.test ~title:"quoted words" @@ fun () ->
+  Test.check ~msg:"single quotes"
+    (String.equal "https://din.osau.re/"
+       (one_param "me.website('https://din.osau.re/')"));
+  Test.check ~msg:"double quotes" (List.length (run "account(\"hannes\")") = 1);
+  Test.check ~msg:"quoted word as directive name"
+    (String.equal "dinosaure" (one_param "'me'.username"));
+  Test.check ~msg:"unterminated quote"
+    (Result.is_error (Bcfgq.of_string "account('oops"))
+
+let test_number_pattern =
+  Test.test ~title:"number as pattern" @@ fun () ->
+  Test.check ~msg:"me.uid(1000)"
+    (String.equal "1000" (one_param "me.uid(1000)"));
+  Test.check ~msg:"overflow"
+    (Result.is_error (Bcfgq.of_string "foo[9999999999999999999999]"));
+  Test.check ~msg:"non-numeric index"
+    (Result.is_error (Bcfgq.of_string "foo[bar]"))
+
+let test_pp_iso =
+  Test.test ~title:"pp isomorphism" @@ fun () ->
+  let iso s =
+    let e = q s in
+    let s' = Format.asprintf "%a" Bcfgq.pp e in
+    e = q s'
+  in
+  Test.check ~msg:"bare" (iso "account(dinosaure|hannes).service[0]");
+  Test.check ~msg:"quoted" (iso "me.website('https://din.osau.re/')");
+  Test.check ~msg:"child/anti-join" (iso "*(:^service)(^dinosaure)");
+  Test.check ~msg:"peval" (iso "account(@(me.username)).service");
+  Test.check ~msg:"directive pattern" (iso "(dinosaure|hannes).service");
+  Test.check ~msg:"nested operators" (iso "account((dinosaure|hannes)&!me)");
+  Test.check ~msg:"prefixed operators" (iso "account((|,dinosaure,hannes))")
+
 let () =
   Test.run
     [
@@ -98,4 +135,7 @@ let () =
       test_wildcard;
       test_child;
       test_antijoin;
+      test_quoting;
+      test_number_pattern;
+      test_pp_iso;
     ]
